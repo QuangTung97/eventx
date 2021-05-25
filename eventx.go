@@ -6,7 +6,7 @@ import (
 )
 
 // Event represents events
-// use type of *Data* is string instead of []byte for immutability
+// type of *Data* is string instead of []byte for immutability
 type Event struct {
 	ID        uint64
 	Seq       uint64
@@ -14,7 +14,7 @@ type Event struct {
 	CreatedAt time.Time
 }
 
-//go:generate moq -stub -out eventx_mocks.go . Repository
+//go:generate moq -out eventx_mocks_test.go . Repository Timer
 
 // Repository for accessing database
 type Repository interface {
@@ -22,4 +22,10 @@ type Repository interface {
 	GetUnprocessedEvents(ctx context.Context, limit uint64) ([]Event, error)
 
 	UpdateSequences(ctx context.Context, events []Event) error
+}
+
+// Timer for timer
+type Timer interface {
+	Reset()
+	Chan() <-chan time.Time
 }

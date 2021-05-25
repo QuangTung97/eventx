@@ -150,6 +150,7 @@ func TestDBProcessor_Signal_GetUnprocessedEvents_Empty(t *testing.T) {
 
 	assert.Equal(t, uint64(1024), callLimit)
 	assert.Equal(t, nil, err)
+	assert.Equal(t, 1, len(repo.GetUnprocessedEventsCalls()))
 	assert.Equal(t, 0, len(repo.UpdateSequencesCalls()))
 }
 

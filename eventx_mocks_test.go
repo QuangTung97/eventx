@@ -6,6 +6,7 @@ package eventx
 import (
 	"context"
 	"sync"
+	"time"
 )
 
 // Ensure, that RepositoryMock does implement Repository.
@@ -74,6 +75,9 @@ type RepositoryMock struct {
 
 // GetLastEvents calls GetLastEventsFunc.
 func (mock *RepositoryMock) GetLastEvents(ctx context.Context, limit uint64) ([]Event, error) {
+	if mock.GetLastEventsFunc == nil {
+		panic("RepositoryMock.GetLastEventsFunc: method is nil but Repository.GetLastEvents was just called")
+	}
 	callInfo := struct {
 		Ctx   context.Context
 		Limit uint64
@@ -84,13 +88,6 @@ func (mock *RepositoryMock) GetLastEvents(ctx context.Context, limit uint64) ([]
 	mock.lockGetLastEvents.Lock()
 	mock.calls.GetLastEvents = append(mock.calls.GetLastEvents, callInfo)
 	mock.lockGetLastEvents.Unlock()
-	if mock.GetLastEventsFunc == nil {
-		var (
-			eventsOut []Event
-			errOut    error
-		)
-		return eventsOut, errOut
-	}
 	return mock.GetLastEventsFunc(ctx, limit)
 }
 
@@ -113,6 +110,9 @@ func (mock *RepositoryMock) GetLastEventsCalls() []struct {
 
 // GetUnprocessedEvents calls GetUnprocessedEventsFunc.
 func (mock *RepositoryMock) GetUnprocessedEvents(ctx context.Context, limit uint64) ([]Event, error) {
+	if mock.GetUnprocessedEventsFunc == nil {
+		panic("RepositoryMock.GetUnprocessedEventsFunc: method is nil but Repository.GetUnprocessedEvents was just called")
+	}
 	callInfo := struct {
 		Ctx   context.Context
 		Limit uint64
@@ -123,13 +123,6 @@ func (mock *RepositoryMock) GetUnprocessedEvents(ctx context.Context, limit uint
 	mock.lockGetUnprocessedEvents.Lock()
 	mock.calls.GetUnprocessedEvents = append(mock.calls.GetUnprocessedEvents, callInfo)
 	mock.lockGetUnprocessedEvents.Unlock()
-	if mock.GetUnprocessedEventsFunc == nil {
-		var (
-			eventsOut []Event
-			errOut    error
-		)
-		return eventsOut, errOut
-	}
 	return mock.GetUnprocessedEventsFunc(ctx, limit)
 }
 
@@ -152,6 +145,9 @@ func (mock *RepositoryMock) GetUnprocessedEventsCalls() []struct {
 
 // UpdateSequences calls UpdateSequencesFunc.
 func (mock *RepositoryMock) UpdateSequences(ctx context.Context, events []Event) error {
+	if mock.UpdateSequencesFunc == nil {
+		panic("RepositoryMock.UpdateSequencesFunc: method is nil but Repository.UpdateSequences was just called")
+	}
 	callInfo := struct {
 		Ctx    context.Context
 		Events []Event
@@ -162,12 +158,6 @@ func (mock *RepositoryMock) UpdateSequences(ctx context.Context, events []Event)
 	mock.lockUpdateSequences.Lock()
 	mock.calls.UpdateSequences = append(mock.calls.UpdateSequences, callInfo)
 	mock.lockUpdateSequences.Unlock()
-	if mock.UpdateSequencesFunc == nil {
-		var (
-			errOut error
-		)
-		return errOut
-	}
 	return mock.UpdateSequencesFunc(ctx, events)
 }
 
@@ -185,5 +175,99 @@ func (mock *RepositoryMock) UpdateSequencesCalls() []struct {
 	mock.lockUpdateSequences.RLock()
 	calls = mock.calls.UpdateSequences
 	mock.lockUpdateSequences.RUnlock()
+	return calls
+}
+
+// Ensure, that TimerMock does implement Timer.
+// If this is not the case, regenerate this file with moq.
+var _ Timer = &TimerMock{}
+
+// TimerMock is a mock implementation of Timer.
+//
+// 	func TestSomethingThatUsesTimer(t *testing.T) {
+//
+// 		// make and configure a mocked Timer
+// 		mockedTimer := &TimerMock{
+// 			ChanFunc: func() <-chan time.Time {
+// 				panic("mock out the Chan method")
+// 			},
+// 			ResetFunc: func()  {
+// 				panic("mock out the Reset method")
+// 			},
+// 		}
+//
+// 		// use mockedTimer in code that requires Timer
+// 		// and then make assertions.
+//
+// 	}
+type TimerMock struct {
+	// ChanFunc mocks the Chan method.
+	ChanFunc func() <-chan time.Time
+
+	// ResetFunc mocks the Reset method.
+	ResetFunc func()
+
+	// calls tracks calls to the methods.
+	calls struct {
+		// Chan holds details about calls to the Chan method.
+		Chan []struct {
+		}
+		// Reset holds details about calls to the Reset method.
+		Reset []struct {
+		}
+	}
+	lockChan  sync.RWMutex
+	lockReset sync.RWMutex
+}
+
+// Chan calls ChanFunc.
+func (mock *TimerMock) Chan() <-chan time.Time {
+	if mock.ChanFunc == nil {
+		panic("TimerMock.ChanFunc: method is nil but Timer.Chan was just called")
+	}
+	callInfo := struct {
+	}{}
+	mock.lockChan.Lock()
+	mock.calls.Chan = append(mock.calls.Chan, callInfo)
+	mock.lockChan.Unlock()
+	return mock.ChanFunc()
+}
+
+// ChanCalls gets all the calls that were made to Chan.
+// Check the length with:
+//     len(mockedTimer.ChanCalls())
+func (mock *TimerMock) ChanCalls() []struct {
+} {
+	var calls []struct {
+	}
+	mock.lockChan.RLock()
+	calls = mock.calls.Chan
+	mock.lockChan.RUnlock()
+	return calls
+}
+
+// Reset calls ResetFunc.
+func (mock *TimerMock) Reset() {
+	if mock.ResetFunc == nil {
+		panic("TimerMock.ResetFunc: method is nil but Timer.Reset was just called")
+	}
+	callInfo := struct {
+	}{}
+	mock.lockReset.Lock()
+	mock.calls.Reset = append(mock.calls.Reset, callInfo)
+	mock.lockReset.Unlock()
+	mock.ResetFunc()
+}
+
+// ResetCalls gets all the calls that were made to Reset.
+// Check the length with:
+//     len(mockedTimer.ResetCalls())
+func (mock *TimerMock) ResetCalls() []struct {
+} {
+	var calls []struct {
+	}
+	mock.lockReset.RLock()
+	calls = mock.calls.Reset
+	mock.lockReset.RUnlock()
 	return calls
 }
