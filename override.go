@@ -1,6 +1,7 @@
 package eventx
 
 type sampleEvent struct {
+	id  uint64
 	seq uint64
 }
 
@@ -9,6 +10,7 @@ type UnmarshalledEvent sampleEvent
 
 func unmarshalEvent(e Event) UnmarshalledEvent {
 	return UnmarshalledEvent(sampleEvent{
+		id:  e.ID,
 		seq: e.Seq,
 	})
 }

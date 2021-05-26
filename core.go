@@ -37,7 +37,14 @@ func newCoreService(coreChan <-chan coreEvents, options eventxOptions) *coreServ
 	}
 }
 
-func (s *coreService) responseToRequest(req fetchRequest) {
+func (s *coreService) requestToResponse(req fetchRequest) {
+	if req.from < s.first {
+		req.respChan <- fetchResponse{
+			existed: false,
+		}
+		return
+	}
+
 	events := req.placeholder
 
 	last := req.from + req.limit
@@ -59,7 +66,7 @@ func (s *coreService) handleWaitList() {
 	clearPos := len(s.waitList)
 	for i, waitReq := range s.waitList {
 		if waitReq.from < s.last {
-			s.responseToRequest(waitReq)
+			s.requestToResponse(waitReq)
 			clearPos--
 			s.waitList[i] = s.waitList[clearPos]
 		}
@@ -89,17 +96,11 @@ func (s *coreService) run(ctx context.Context) {
 		s.handleWaitList()
 
 	case req := <-s.fetchChan:
-		if req.from < s.first {
-			req.respChan <- fetchResponse{
-				existed: false,
-			}
-			return
-		}
 		if req.from >= s.last {
 			s.waitList = append(s.waitList, req)
 			return
 		}
-		s.responseToRequest(req)
+		s.requestToResponse(req)
 
 	case <-ctx.Done():
 	}

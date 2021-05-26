@@ -45,8 +45,8 @@ func TestCoreServiceFetch_SimpleCase(t *testing.T) {
 	assert.Equal(t, fetchResponse{
 		existed: true,
 		events: []UnmarshalledEvent{
-			{seq: 20},
-			{seq: 21},
+			unmarshalEvent(Event{ID: 10, Seq: 20}),
+			unmarshalEvent(Event{ID: 8, Seq: 21}),
 		},
 	}, resp)
 	assert.Equal(t, 100, cap(resp.events))
@@ -124,8 +124,8 @@ func TestCoreServiceFetch_Multiple_Core_Events__Behind(t *testing.T) {
 	assert.Equal(t, fetchResponse{
 		existed: true,
 		events: []UnmarshalledEvent{
-			{seq: 30},
-			{seq: 31},
+			unmarshalEvent(Event{ID: 8, Seq: 30}),
+			unmarshalEvent(Event{ID: 11, Seq: 31}),
 		},
 	}, resp)
 	assert.Equal(t, 100, cap(resp.events))
@@ -162,9 +162,9 @@ func TestCoreServiceFetch_Limit_Exceed(t *testing.T) {
 	assert.Equal(t, fetchResponse{
 		existed: true,
 		events: []UnmarshalledEvent{
-			{seq: 30},
-			{seq: 31},
-			{seq: 32},
+			unmarshalEvent(Event{ID: 8, Seq: 30}),
+			unmarshalEvent(Event{ID: 11, Seq: 31}),
+			unmarshalEvent(Event{ID: 15, Seq: 32}),
 		},
 	}, resp)
 	assert.Equal(t, 100, cap(resp.events))
@@ -238,10 +238,10 @@ func TestCoreServiceFetch_Wrap_Around_And_Override_Exist(t *testing.T) {
 	assert.Equal(t, fetchResponse{
 		existed: true,
 		events: []UnmarshalledEvent{
-			{seq: 31},
-			{seq: 32},
-			{seq: 33},
-			{seq: 34},
+			unmarshalEvent(Event{ID: 9, Seq: 31}),
+			unmarshalEvent(Event{ID: 11, Seq: 32}),
+			unmarshalEvent(Event{ID: 15, Seq: 33}),
+			unmarshalEvent(Event{ID: 18, Seq: 34}),
 		},
 	}, resp)
 }
@@ -283,7 +283,7 @@ func TestCoreServiceFetch_Add_To_Wait_List(t *testing.T) {
 	assert.Equal(t, fetchResponse{
 		existed: true,
 		events: []UnmarshalledEvent{
-			{seq: 35},
+			unmarshalEvent(Event{ID: 20, Seq: 35}),
 		},
 	}, resp)
 
