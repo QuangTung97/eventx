@@ -75,6 +75,7 @@ func sleepContext(ctx context.Context, d time.Duration) {
 }
 
 func (r *Runner) runDBProcessor(ctx context.Context) {
+OuterLoop:
 	for {
 		err := r.processor.init(ctx)
 		if ctx.Err() != nil {
@@ -89,17 +90,19 @@ func (r *Runner) runDBProcessor(ctx context.Context) {
 			continue
 		}
 
-		err = r.processor.run(ctx)
-		if ctx.Err() != nil {
-			return
-		}
-		if err != nil {
-			r.options.logger.Error("DB Processor Run Error", zap.Error(err))
-			sleepContext(ctx, r.options.dbProcessorErrorRetryTimer)
+		for {
+			err = r.processor.run(ctx)
 			if ctx.Err() != nil {
 				return
 			}
-			continue
+			if err != nil {
+				r.options.logger.Error("DB Processor Run Error", zap.Error(err))
+				sleepContext(ctx, r.options.dbProcessorErrorRetryTimer)
+				if ctx.Err() != nil {
+					return
+				}
+				continue OuterLoop
+			}
 		}
 	}
 }
