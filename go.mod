@@ -1,4 +1,4 @@
-module eventx
+module github.com/QuangTung97/eventx
 
 go 1.16
 
