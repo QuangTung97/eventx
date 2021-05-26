@@ -245,3 +245,86 @@ func TestCoreServiceFetch_Wrap_Around_And_Override_Exist(t *testing.T) {
 		},
 	}, resp)
 }
+
+func TestCoreServiceFetch_Add_To_Wait_List(t *testing.T) {
+	t.Parallel()
+
+	coreChan := make(chan coreEvents, 1024)
+	s := newCoreService(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
+
+	coreChan <- []Event{
+		{ID: 8, Seq: 30},
+		{ID: 9, Seq: 31},
+		{ID: 11, Seq: 32},
+		{ID: 15, Seq: 33},
+		{ID: 18, Seq: 34},
+	}
+	ctx := context.Background()
+	s.run(ctx)
+
+	respChan := make(chan fetchResponse, 1)
+	s.fetch(fetchRequest{
+		limit:       2,
+		from:        35,
+		placeholder: make([]UnmarshalledEvent, 0, 100),
+		respChan:    respChan,
+	})
+	s.run(ctx)
+
+	assert.Equal(t, 0, len(respChan))
+
+	coreChan <- []Event{
+		{ID: 20, Seq: 35},
+	}
+	s.run(ctx)
+
+	assert.Equal(t, 1, len(respChan))
+	resp := drainRespChan(respChan)
+	assert.Equal(t, fetchResponse{
+		existed: true,
+		events: []UnmarshalledEvent{
+			{seq: 35},
+		},
+	}, resp)
+
+	coreChan <- []Event{
+		{ID: 25, Seq: 36},
+	}
+	s.run(ctx)
+	assert.Equal(t, 0, len(respChan))
+}
+
+func TestCoreServiceFetch_Wait_To_The_Far_Future(t *testing.T) {
+	t.Parallel()
+
+	coreChan := make(chan coreEvents, 1024)
+	s := newCoreService(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
+
+	coreChan <- []Event{
+		{ID: 8, Seq: 30},
+		{ID: 9, Seq: 31},
+		{ID: 11, Seq: 32},
+		{ID: 15, Seq: 33},
+		{ID: 18, Seq: 34},
+	}
+	ctx := context.Background()
+	s.run(ctx)
+
+	respChan := make(chan fetchResponse, 1)
+	s.fetch(fetchRequest{
+		limit:       2,
+		from:        36,
+		placeholder: make([]UnmarshalledEvent, 0, 100),
+		respChan:    respChan,
+	})
+	s.run(ctx)
+
+	assert.Equal(t, 0, len(respChan))
+
+	coreChan <- []Event{
+		{ID: 20, Seq: 35},
+	}
+	s.run(ctx)
+
+	assert.Equal(t, 0, len(respChan))
+}

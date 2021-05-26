@@ -23,6 +23,8 @@ type coreService struct {
 	storedEvents []UnmarshalledEvent
 	first        uint64
 	last         uint64
+
+	waitList []fetchRequest
 }
 
 func newCoreService(coreChan <-chan coreEvents, options eventxOptions) *coreService {
@@ -33,6 +35,39 @@ func newCoreService(coreChan <-chan coreEvents, options eventxOptions) *coreServ
 		first:        0,
 		last:         0,
 	}
+}
+
+func (s *coreService) responseToRequest(req fetchRequest) {
+	events := req.placeholder
+
+	last := req.from + req.limit
+	if last > s.last {
+		last = s.last
+	}
+
+	size := uint64(len(s.storedEvents))
+	for i := req.from; i < last; i++ {
+		events = append(events, s.storedEvents[i%size])
+	}
+	req.respChan <- fetchResponse{
+		existed: true,
+		events:  events,
+	}
+}
+
+func (s *coreService) handleWaitList() {
+	clearPos := len(s.waitList)
+	for i, waitReq := range s.waitList {
+		if waitReq.from < s.last {
+			s.responseToRequest(waitReq)
+			clearPos--
+			s.waitList[i] = s.waitList[clearPos]
+		}
+	}
+	for i := clearPos; i < len(s.waitList); i++ {
+		s.waitList[i] = fetchRequest{}
+	}
+	s.waitList = s.waitList[:clearPos]
 }
 
 func (s *coreService) run(ctx context.Context) {
@@ -51,6 +86,7 @@ func (s *coreService) run(ctx context.Context) {
 		for _, e := range events {
 			s.storedEvents[e.Seq%size] = unmarshalEvent(e)
 		}
+		s.handleWaitList()
 
 	case req := <-s.fetchChan:
 		if req.from < s.first {
@@ -59,22 +95,11 @@ func (s *coreService) run(ctx context.Context) {
 			}
 			return
 		}
-
-		events := req.placeholder
-
-		last := req.from + req.limit
-		if last > s.last {
-			last = s.last
+		if req.from >= s.last {
+			s.waitList = append(s.waitList, req)
+			return
 		}
-
-		size := uint64(len(s.storedEvents))
-		for i := req.from; i < last; i++ {
-			events = append(events, s.storedEvents[i%size])
-		}
-		req.respChan <- fetchResponse{
-			existed: true,
-			events:  events,
-		}
+		s.responseToRequest(req)
 
 	case <-ctx.Done():
 	}
