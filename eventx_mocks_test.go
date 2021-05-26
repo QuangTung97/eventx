@@ -194,6 +194,9 @@ var _ Timer = &TimerMock{}
 // 			ResetFunc: func()  {
 // 				panic("mock out the Reset method")
 // 			},
+// 			ResetAfterChanFunc: func()  {
+// 				panic("mock out the ResetAfterChan method")
+// 			},
 // 		}
 //
 // 		// use mockedTimer in code that requires Timer
@@ -207,6 +210,9 @@ type TimerMock struct {
 	// ResetFunc mocks the Reset method.
 	ResetFunc func()
 
+	// ResetAfterChanFunc mocks the ResetAfterChan method.
+	ResetAfterChanFunc func()
+
 	// calls tracks calls to the methods.
 	calls struct {
 		// Chan holds details about calls to the Chan method.
@@ -215,9 +221,13 @@ type TimerMock struct {
 		// Reset holds details about calls to the Reset method.
 		Reset []struct {
 		}
+		// ResetAfterChan holds details about calls to the ResetAfterChan method.
+		ResetAfterChan []struct {
+		}
 	}
-	lockChan  sync.RWMutex
-	lockReset sync.RWMutex
+	lockChan           sync.RWMutex
+	lockReset          sync.RWMutex
+	lockResetAfterChan sync.RWMutex
 }
 
 // Chan calls ChanFunc.
@@ -269,5 +279,31 @@ func (mock *TimerMock) ResetCalls() []struct {
 	mock.lockReset.RLock()
 	calls = mock.calls.Reset
 	mock.lockReset.RUnlock()
+	return calls
+}
+
+// ResetAfterChan calls ResetAfterChanFunc.
+func (mock *TimerMock) ResetAfterChan() {
+	if mock.ResetAfterChanFunc == nil {
+		panic("TimerMock.ResetAfterChanFunc: method is nil but Timer.ResetAfterChan was just called")
+	}
+	callInfo := struct {
+	}{}
+	mock.lockResetAfterChan.Lock()
+	mock.calls.ResetAfterChan = append(mock.calls.ResetAfterChan, callInfo)
+	mock.lockResetAfterChan.Unlock()
+	mock.ResetAfterChanFunc()
+}
+
+// ResetAfterChanCalls gets all the calls that were made to ResetAfterChan.
+// Check the length with:
+//     len(mockedTimer.ResetAfterChanCalls())
+func (mock *TimerMock) ResetAfterChanCalls() []struct {
+} {
+	var calls []struct {
+	}
+	mock.lockResetAfterChan.RLock()
+	calls = mock.calls.ResetAfterChan
+	mock.lockResetAfterChan.RUnlock()
 	return calls
 }

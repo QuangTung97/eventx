@@ -5,23 +5,29 @@ import "context"
 type coreEvents []Event
 
 type dbProcessor struct {
+	options    eventxOptions
 	repo       Repository
 	coreChan   chan<- coreEvents
 	signalChan chan struct{}
 
 	lastSequence uint64
+	retryTimer   Timer
 }
 
 func newDBProcessor(repo Repository, coreChan chan<- coreEvents, options eventxOptions) *dbProcessor {
 	return &dbProcessor{
+		options:    options,
 		repo:       repo,
 		signalChan: make(chan struct{}, 1024),
 		coreChan:   coreChan,
+
+		lastSequence: 0,
+		retryTimer:   newTimer(options.dbProcessorRetryTimer),
 	}
 }
 
 func (p *dbProcessor) init(ctx context.Context) error {
-	events, err := p.repo.GetLastEvents(ctx, 1024)
+	events, err := p.repo.GetLastEvents(ctx, p.options.getLastEventsLimit)
 	if err != nil {
 		return err
 	}
@@ -39,7 +45,7 @@ func (p *dbProcessor) signal() {
 }
 
 func (p *dbProcessor) handleSignal(ctx context.Context) error {
-	events, err := p.repo.GetUnprocessedEvents(ctx, 1024)
+	events, err := p.repo.GetUnprocessedEvents(ctx, p.options.getUnprocessedEventsLimit)
 	if err != nil {
 		return err
 	}
@@ -64,6 +70,7 @@ func (p *dbProcessor) handleSignal(ctx context.Context) error {
 func (p *dbProcessor) run(ctx context.Context) error {
 	select {
 	case <-p.signalChan:
+		p.retryTimer.Reset()
 	BatchLoop:
 		for {
 			select {
@@ -73,6 +80,10 @@ func (p *dbProcessor) run(ctx context.Context) error {
 				break BatchLoop
 			}
 		}
+		return p.handleSignal(ctx)
+
+	case <-p.retryTimer.Chan():
+		p.retryTimer.ResetAfterChan()
 		return p.handleSignal(ctx)
 
 	case <-ctx.Done():

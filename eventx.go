@@ -27,5 +27,6 @@ type Repository interface {
 // Timer for timer
 type Timer interface {
 	Reset()
+	ResetAfterChan()
 	Chan() <-chan time.Time
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/stretchr/testify/assert"
 	"testing"
+	"time"
 )
 
 func initWithEvents(repo *RepositoryMock, p *dbProcessor, events []Event) {
@@ -28,11 +29,11 @@ func drainCoreEventsChan(ch <-chan coreEvents) []Event {
 
 func newDBProcessorWithRepo(repo Repository) *dbProcessor {
 	coreChan := make(chan coreEvents, 1024)
-	return newDBProcessor(repo, coreChan, eventxOptions{})
+	return newDBProcessor(repo, coreChan, computeOptions())
 }
 
 func newDBProcessorWithRepoAndCoreChan(repo Repository, coreChan chan<- coreEvents) *dbProcessor {
-	return newDBProcessor(repo, coreChan, eventxOptions{})
+	return newDBProcessor(repo, coreChan, computeOptions())
 }
 
 func TestDBProcessor_Init_EmptyLastEvents(t *testing.T) {
@@ -115,6 +116,14 @@ func TestDBProcessor_Signal_GetUnprocessedEvents_Error(t *testing.T) {
 
 	repo := &RepositoryMock{}
 	p := newDBProcessorWithRepo(repo)
+	timer := &TimerMock{}
+	p.retryTimer = timer
+
+	timer.ResetFunc = func() {
+	}
+	timer.ChanFunc = func() <-chan time.Time {
+		return nil
+	}
 
 	initWithEvents(repo, p, nil)
 
@@ -127,6 +136,7 @@ func TestDBProcessor_Signal_GetUnprocessedEvents_Error(t *testing.T) {
 	p.signal()
 	err := p.run(context.Background())
 
+	assert.Equal(t, 1, len(timer.ResetCalls()))
 	assert.Equal(t, uint64(1024), callLimit)
 	assert.Equal(t, errors.New("get-unprocessed-error"), err)
 }
@@ -290,4 +300,45 @@ func TestDBProcessor_Signal_With_Init_Events_Multiple_Signal(t *testing.T) {
 	assert.Equal(t, 1, len(repo.UpdateSequencesCalls()))
 	assert.Equal(t, 2, len(coreChan))
 	assert.Equal(t, 0, len(p.signalChan))
+}
+
+func TestDBProcessor_Run_With_Timeout(t *testing.T) {
+	t.Parallel()
+
+	repo := &RepositoryMock{}
+	coreChan := make(chan coreEvents, 1024)
+	p := newDBProcessorWithRepoAndCoreChan(repo, coreChan)
+	timer := &TimerMock{}
+	p.retryTimer = timer
+
+	timerChan := make(chan time.Time, 1)
+	timerChan <- time.Now()
+
+	timer.ChanFunc = func() <-chan time.Time {
+		return timerChan
+	}
+	timer.ResetAfterChanFunc = func() {}
+
+	initWithEvents(repo, p, []Event{
+		{ID: 5, Seq: 50},
+		{ID: 8, Seq: 51},
+	})
+
+	getUnprocessedWithEvents(repo, []Event{
+		{ID: 10},
+		{ID: 7},
+		{ID: 13},
+	})
+
+	repo.UpdateSequencesFunc = func(ctx context.Context, events []Event) error {
+		return nil
+	}
+
+	err := p.run(context.Background())
+
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 1, len(repo.UpdateSequencesCalls()))
+	assert.Equal(t, 2, len(coreChan))
+	assert.Equal(t, 0, len(p.signalChan))
+	assert.Equal(t, 1, len(timer.ResetAfterChanCalls()))
 }
