@@ -16,9 +16,10 @@ func TestComputeCoreOptions(t *testing.T) {
 			name: "default",
 			opts: computeOptions(),
 			expected: eventxOptions{
-				getLastEventsLimit:        1024,
-				getUnprocessedEventsLimit: 1024,
+				getLastEventsLimit:        256,
+				getUnprocessedEventsLimit: 256,
 				dbProcessorRetryTimer:     60 * time.Second,
+				coreStoredEventsSize:      1024,
 			},
 		},
 		{
@@ -26,26 +27,39 @@ func TestComputeCoreOptions(t *testing.T) {
 			opts: computeOptions(WithGetLastEventsLimit(50)),
 			expected: eventxOptions{
 				getLastEventsLimit:        50,
-				getUnprocessedEventsLimit: 1024,
+				getUnprocessedEventsLimit: 256,
 				dbProcessorRetryTimer:     60 * time.Second,
+				coreStoredEventsSize:      1024,
 			},
 		},
 		{
 			name: "with-get-unprocessed-events-limit",
 			opts: computeOptions(WithGetUnprocessedEventsLimit(100)),
 			expected: eventxOptions{
-				getLastEventsLimit:        1024,
+				getLastEventsLimit:        256,
 				getUnprocessedEventsLimit: 100,
 				dbProcessorRetryTimer:     60 * time.Second,
+				coreStoredEventsSize:      1024,
 			},
 		},
 		{
 			name: "with-db-processor-retry-timer",
 			opts: computeOptions(WithDBProcessorRetryTimer(20 * time.Second)),
 			expected: eventxOptions{
-				getLastEventsLimit:        1024,
-				getUnprocessedEventsLimit: 1024,
+				getLastEventsLimit:        256,
+				getUnprocessedEventsLimit: 256,
 				dbProcessorRetryTimer:     20 * time.Second,
+				coreStoredEventsSize:      1024,
+			},
+		},
+		{
+			name: "with-core-stored-events-size",
+			opts: computeOptions(WithCoreStoredEventsSize(2000)),
+			expected: eventxOptions{
+				getLastEventsLimit:        256,
+				getUnprocessedEventsLimit: 256,
+				dbProcessorRetryTimer:     60 * time.Second,
+				coreStoredEventsSize:      2000,
 			},
 		},
 	}

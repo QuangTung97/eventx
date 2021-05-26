@@ -52,7 +52,7 @@ func TestDBProcessor_Init_EmptyLastEvents(t *testing.T) {
 	err := p.init(ctx)
 
 	assert.Equal(t, 1, len(repo.GetLastEventsCalls()))
-	assert.Equal(t, uint64(1024), callLimit)
+	assert.Equal(t, uint64(256), callLimit)
 	assert.Equal(t, nil, err)
 }
 
@@ -137,7 +137,7 @@ func TestDBProcessor_Signal_GetUnprocessedEvents_Error(t *testing.T) {
 	err := p.run(context.Background())
 
 	assert.Equal(t, 1, len(timer.ResetCalls()))
-	assert.Equal(t, uint64(1024), callLimit)
+	assert.Equal(t, uint64(256), callLimit)
 	assert.Equal(t, errors.New("get-unprocessed-error"), err)
 }
 
@@ -158,7 +158,7 @@ func TestDBProcessor_Signal_GetUnprocessedEvents_Empty(t *testing.T) {
 	p.signal()
 	err := p.run(context.Background())
 
-	assert.Equal(t, uint64(1024), callLimit)
+	assert.Equal(t, uint64(256), callLimit)
 	assert.Equal(t, nil, err)
 	assert.Equal(t, 1, len(repo.GetUnprocessedEventsCalls()))
 	assert.Equal(t, 0, len(repo.UpdateSequencesCalls()))
