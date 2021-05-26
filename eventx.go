@@ -178,7 +178,7 @@ func (s *Subscriber) Fetch(ctx context.Context) ([]UnmarshalledEvent, error) {
 				return nil, err
 			}
 			if len(events) > 0 {
-				s.from = events[len(events)-1].Seq
+				s.from = events[len(events)-1].Seq + 1
 			}
 
 			unmarshalled := make([]UnmarshalledEvent, 0, len(events))
@@ -187,7 +187,7 @@ func (s *Subscriber) Fetch(ctx context.Context) ([]UnmarshalledEvent, error) {
 			}
 			return unmarshalled, nil
 		}
-		s.from = resp.events[len(resp.events)-1].getSequence()
+		s.from = resp.events[len(resp.events)-1].getSequence() + 1
 		return cloneAndClearEvents(resp.events), nil
 
 	case <-ctx.Done():
