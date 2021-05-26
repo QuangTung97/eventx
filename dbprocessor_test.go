@@ -36,6 +36,10 @@ func newDBProcessorWithRepoAndCoreChan(repo Repository, coreChan chan<- coreEven
 	return newDBProcessor(repo, coreChan, computeOptions())
 }
 
+func newDBProcessorWithOptions(repo Repository, coreChan chan<- coreEvents, options eventxOptions) *dbProcessor {
+	return newDBProcessor(repo, coreChan, options)
+}
+
 func TestDBProcessor_Init_EmptyLastEvents(t *testing.T) {
 	t.Parallel()
 
@@ -230,6 +234,78 @@ func TestDBProcessor_Signal_GetUnprocessedEvents_WithEvents_Update_OK(t *testing
 		{ID: 7, Seq: 2},
 		{ID: 13, Seq: 3},
 	}, drainCoreEventsChan(coreChan))
+}
+
+func TestDBProcessor_Signal_GetUnprocessedEvents_Reach_Limit__Resend_Signal(t *testing.T) {
+	t.Parallel()
+
+	repo := &RepositoryMock{}
+	coreChan := make(chan coreEvents, 1024)
+	p := newDBProcessorWithOptions(repo, coreChan, computeOptions(
+		WithGetUnprocessedEventsLimit(4),
+	))
+	initWithEvents(repo, p, nil)
+
+	getUnprocessedWithEvents(repo, []Event{
+		{ID: 10},
+		{ID: 7},
+		{ID: 13},
+		{ID: 18},
+	})
+
+	repo.UpdateSequencesFunc = func(ctx context.Context, events []Event) error {
+		return nil
+	}
+
+	p.signal()
+	err := p.run(context.Background())
+
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 1, len(repo.UpdateSequencesCalls()))
+	assert.Equal(t, 1, len(coreChan))
+	assert.Equal(t, []Event{
+		{ID: 10, Seq: 1},
+		{ID: 7, Seq: 2},
+		{ID: 13, Seq: 3},
+		{ID: 18, Seq: 4},
+	}, drainCoreEventsChan(coreChan))
+
+	assert.Equal(t, 1, len(p.signalChan))
+}
+
+func TestDBProcessor_Signal_GetUnprocessedEvents_Near_Reach_Limit__Not_Resend_Signal(t *testing.T) {
+	t.Parallel()
+
+	repo := &RepositoryMock{}
+	coreChan := make(chan coreEvents, 1024)
+	p := newDBProcessorWithOptions(repo, coreChan, computeOptions(
+		WithGetUnprocessedEventsLimit(4),
+	))
+	initWithEvents(repo, p, nil)
+
+	getUnprocessedWithEvents(repo, []Event{
+		{ID: 10},
+		{ID: 7},
+		{ID: 13},
+	})
+
+	repo.UpdateSequencesFunc = func(ctx context.Context, events []Event) error {
+		return nil
+	}
+
+	p.signal()
+	err := p.run(context.Background())
+
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 1, len(repo.UpdateSequencesCalls()))
+	assert.Equal(t, 1, len(coreChan))
+	assert.Equal(t, []Event{
+		{ID: 10, Seq: 1},
+		{ID: 7, Seq: 2},
+		{ID: 13, Seq: 3},
+	}, drainCoreEventsChan(coreChan))
+
+	assert.Equal(t, 0, len(p.signalChan))
 }
 
 func TestDBProcessor_Signal_With_Init_Events(t *testing.T) {

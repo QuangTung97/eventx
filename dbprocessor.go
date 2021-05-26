@@ -52,6 +52,9 @@ func (p *dbProcessor) handleSignal(ctx context.Context) error {
 	if len(events) == 0 {
 		return nil
 	}
+	if len(events) >= int(p.options.getUnprocessedEventsLimit) {
+		p.signalChan <- struct{}{}
+	}
 
 	for i := range events {
 		p.lastSequence++
