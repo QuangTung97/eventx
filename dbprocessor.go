@@ -20,13 +20,13 @@ func newDBProcessor(repo Repository, coreChan chan<- coreEvents, options eventxO
 		repo:       repo,
 		signalChan: make(chan struct{}, 1024),
 		coreChan:   coreChan,
-
-		lastSequence: 0,
-		retryTimer:   newTimer(options.dbProcessorRetryTimer),
 	}
 }
 
 func (p *dbProcessor) init(ctx context.Context) error {
+	p.lastSequence = 0
+	p.retryTimer = newTimer(p.options.dbProcessorRetryTimer)
+
 	events, err := p.repo.GetLastEvents(ctx, p.options.getLastEventsLimit)
 	if err != nil {
 		return err

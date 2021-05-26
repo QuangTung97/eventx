@@ -19,6 +19,9 @@ var _ Repository = &RepositoryMock{}
 //
 // 		// make and configure a mocked Repository
 // 		mockedRepository := &RepositoryMock{
+// 			GetEventsFromFunc: func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+// 				panic("mock out the GetEventsFrom method")
+// 			},
 // 			GetLastEventsFunc: func(ctx context.Context, limit uint64) ([]Event, error) {
 // 				panic("mock out the GetLastEvents method")
 // 			},
@@ -35,6 +38,9 @@ var _ Repository = &RepositoryMock{}
 //
 // 	}
 type RepositoryMock struct {
+	// GetEventsFromFunc mocks the GetEventsFrom method.
+	GetEventsFromFunc func(ctx context.Context, from uint64, limit uint64) ([]Event, error)
+
 	// GetLastEventsFunc mocks the GetLastEvents method.
 	GetLastEventsFunc func(ctx context.Context, limit uint64) ([]Event, error)
 
@@ -46,6 +52,15 @@ type RepositoryMock struct {
 
 	// calls tracks calls to the methods.
 	calls struct {
+		// GetEventsFrom holds details about calls to the GetEventsFrom method.
+		GetEventsFrom []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// From is the from argument value.
+			From uint64
+			// Limit is the limit argument value.
+			Limit uint64
+		}
 		// GetLastEvents holds details about calls to the GetLastEvents method.
 		GetLastEvents []struct {
 			// Ctx is the ctx argument value.
@@ -68,9 +83,49 @@ type RepositoryMock struct {
 			Events []Event
 		}
 	}
+	lockGetEventsFrom        sync.RWMutex
 	lockGetLastEvents        sync.RWMutex
 	lockGetUnprocessedEvents sync.RWMutex
 	lockUpdateSequences      sync.RWMutex
+}
+
+// GetEventsFrom calls GetEventsFromFunc.
+func (mock *RepositoryMock) GetEventsFrom(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+	if mock.GetEventsFromFunc == nil {
+		panic("RepositoryMock.GetEventsFromFunc: method is nil but Repository.GetEventsFrom was just called")
+	}
+	callInfo := struct {
+		Ctx   context.Context
+		From  uint64
+		Limit uint64
+	}{
+		Ctx:   ctx,
+		From:  from,
+		Limit: limit,
+	}
+	mock.lockGetEventsFrom.Lock()
+	mock.calls.GetEventsFrom = append(mock.calls.GetEventsFrom, callInfo)
+	mock.lockGetEventsFrom.Unlock()
+	return mock.GetEventsFromFunc(ctx, from, limit)
+}
+
+// GetEventsFromCalls gets all the calls that were made to GetEventsFrom.
+// Check the length with:
+//     len(mockedRepository.GetEventsFromCalls())
+func (mock *RepositoryMock) GetEventsFromCalls() []struct {
+	Ctx   context.Context
+	From  uint64
+	Limit uint64
+} {
+	var calls []struct {
+		Ctx   context.Context
+		From  uint64
+		Limit uint64
+	}
+	mock.lockGetEventsFrom.RLock()
+	calls = mock.calls.GetEventsFrom
+	mock.lockGetEventsFrom.RUnlock()
+	return calls
 }
 
 // GetLastEvents calls GetLastEventsFunc.

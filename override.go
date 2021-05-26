@@ -14,3 +14,7 @@ func unmarshalEvent(e Event) UnmarshalledEvent {
 		seq: e.Seq,
 	})
 }
+
+func (e UnmarshalledEvent) getSequence() uint64 {
+	return e.seq
+}

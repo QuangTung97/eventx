@@ -116,6 +116,8 @@ func TestDBProcessor_Signal_GetUnprocessedEvents_Error(t *testing.T) {
 
 	repo := &RepositoryMock{}
 	p := newDBProcessorWithRepo(repo)
+	initWithEvents(repo, p, nil)
+
 	timer := &TimerMock{}
 	p.retryTimer = timer
 
@@ -124,8 +126,6 @@ func TestDBProcessor_Signal_GetUnprocessedEvents_Error(t *testing.T) {
 	timer.ChanFunc = func() <-chan time.Time {
 		return nil
 	}
-
-	initWithEvents(repo, p, nil)
 
 	var callLimit uint64
 	repo.GetUnprocessedEventsFunc = func(ctx context.Context, limit uint64) ([]Event, error) {
@@ -307,7 +307,13 @@ func TestDBProcessor_Run_With_Timeout(t *testing.T) {
 
 	repo := &RepositoryMock{}
 	coreChan := make(chan coreEvents, 1024)
+
 	p := newDBProcessorWithRepoAndCoreChan(repo, coreChan)
+	initWithEvents(repo, p, []Event{
+		{ID: 5, Seq: 50},
+		{ID: 8, Seq: 51},
+	})
+
 	timer := &TimerMock{}
 	p.retryTimer = timer
 
@@ -318,11 +324,6 @@ func TestDBProcessor_Run_With_Timeout(t *testing.T) {
 		return timerChan
 	}
 	timer.ResetAfterChanFunc = func() {}
-
-	initWithEvents(repo, p, []Event{
-		{ID: 5, Seq: 50},
-		{ID: 8, Seq: 51},
-	})
 
 	getUnprocessedWithEvents(repo, []Event{
 		{ID: 10},
