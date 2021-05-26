@@ -80,8 +80,9 @@ func (s *coreService) handleWaitList() {
 func (s *coreService) run(ctx context.Context) {
 	select {
 	case events := <-s.coreChan:
-		if s.first == 0 {
-			s.first = events[0].Seq
+		firstSeq := events[0].Seq
+		if s.first == 0 || firstSeq != s.last {
+			s.first = firstSeq
 		}
 		s.last = events[len(events)-1].Seq + 1
 

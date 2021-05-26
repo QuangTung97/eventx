@@ -327,4 +327,173 @@ func TestCoreServiceFetch_Wait_To_The_Far_Future(t *testing.T) {
 	s.run(ctx)
 
 	assert.Equal(t, 0, len(respChan))
+
+	coreChan <- []Event{
+		{ID: 22, Seq: 36},
+		{ID: 23, Seq: 37},
+	}
+	s.run(ctx)
+	assert.Equal(t, 1, len(respChan))
+	resp := drainRespChan(respChan)
+	assert.Equal(t, fetchResponse{
+		existed: true,
+		events: []UnmarshalledEvent{
+			unmarshalEvent(Event{ID: 22, Seq: 36}),
+			unmarshalEvent(Event{ID: 23, Seq: 37}),
+		},
+	}, resp)
+}
+
+func TestCoreServiceFetch_Core_Events_Not_In_Order__Not_Existed(t *testing.T) {
+	t.Parallel()
+
+	coreChan := make(chan coreEvents, 1024)
+	s := newCoreService(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
+
+	coreChan <- []Event{
+		{ID: 8, Seq: 30},
+		{ID: 9, Seq: 31},
+		{ID: 11, Seq: 32},
+	}
+	ctx := context.Background()
+	s.run(ctx)
+
+	coreChan <- []Event{
+		{ID: 14, Seq: 38},
+		{ID: 12, Seq: 39},
+		{ID: 18, Seq: 40},
+	}
+	s.run(ctx)
+
+	respChan := make(chan fetchResponse, 1)
+	s.fetch(fetchRequest{
+		limit:       3,
+		from:        37,
+		placeholder: make([]UnmarshalledEvent, 0, 100),
+		respChan:    respChan,
+	})
+	s.run(ctx)
+	assert.Equal(t, 1, len(respChan))
+	assert.Equal(t, fetchResponse{
+		existed: false,
+	}, drainRespChan(respChan))
+}
+
+func TestCoreServiceFetch_Core_Events_Not_In_Order__Existed(t *testing.T) {
+	t.Parallel()
+
+	coreChan := make(chan coreEvents, 1024)
+	s := newCoreService(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
+
+	coreChan <- []Event{
+		{ID: 8, Seq: 30},
+		{ID: 9, Seq: 31},
+		{ID: 11, Seq: 32},
+	}
+	ctx := context.Background()
+	s.run(ctx)
+
+	coreChan <- []Event{
+		{ID: 14, Seq: 38},
+		{ID: 12, Seq: 39},
+		{ID: 18, Seq: 40},
+	}
+	s.run(ctx)
+
+	respChan := make(chan fetchResponse, 1)
+	s.fetch(fetchRequest{
+		limit:       3,
+		from:        38,
+		placeholder: make([]UnmarshalledEvent, 0, 100),
+		respChan:    respChan,
+	})
+	s.run(ctx)
+	assert.Equal(t, 1, len(respChan))
+	assert.Equal(t, fetchResponse{
+		existed: true,
+		events: []UnmarshalledEvent{
+			unmarshalEvent(Event{ID: 14, Seq: 38}),
+			unmarshalEvent(Event{ID: 12, Seq: 39}),
+			unmarshalEvent(Event{ID: 18, Seq: 40}),
+		},
+	}, drainRespChan(respChan))
+}
+
+func TestCoreServiceFetch_Wait_And_Events_Not_In_Order(t *testing.T) {
+	t.Parallel()
+
+	coreChan := make(chan coreEvents, 1024)
+	s := newCoreService(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
+
+	coreChan <- []Event{
+		{ID: 8, Seq: 30},
+		{ID: 9, Seq: 31},
+		{ID: 11, Seq: 32},
+	}
+	ctx := context.Background()
+	s.run(ctx)
+
+	respChan := make(chan fetchResponse, 1)
+	s.fetch(fetchRequest{
+		limit:       3,
+		from:        34,
+		placeholder: make([]UnmarshalledEvent, 0, 100),
+		respChan:    respChan,
+	})
+	s.run(ctx)
+
+	assert.Equal(t, 0, len(respChan))
+
+	coreChan <- []Event{
+		{ID: 14, Seq: 38},
+		{ID: 12, Seq: 39},
+		{ID: 18, Seq: 40},
+	}
+	s.run(ctx)
+
+	assert.Equal(t, 1, len(respChan))
+	assert.Equal(t, fetchResponse{
+		existed: false,
+	}, drainRespChan(respChan))
+}
+
+func TestCoreServiceFetch_Core_Events_Go_Backward(t *testing.T) {
+	t.Parallel()
+
+	coreChan := make(chan coreEvents, 1024)
+	s := newCoreService(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
+
+	coreChan <- []Event{
+		{ID: 8, Seq: 30},
+		{ID: 9, Seq: 31},
+		{ID: 11, Seq: 32},
+	}
+	ctx := context.Background()
+	s.run(ctx)
+
+	coreChan <- []Event{
+		{ID: 14, Seq: 20},
+		{ID: 12, Seq: 21},
+		{ID: 18, Seq: 22},
+	}
+	s.run(ctx)
+
+	respChan := make(chan fetchResponse, 1)
+	s.fetch(fetchRequest{
+		limit:       6,
+		from:        20,
+		placeholder: make([]UnmarshalledEvent, 0, 100),
+		respChan:    respChan,
+	})
+	s.run(ctx)
+
+	assert.Equal(t, 1, len(respChan))
+	assert.Equal(t, fetchResponse{
+		existed: true,
+		events: []UnmarshalledEvent{
+			unmarshalEvent(Event{ID: 14, Seq: 20}),
+			unmarshalEvent(Event{ID: 12, Seq: 21}),
+			unmarshalEvent(Event{ID: 18, Seq: 22}),
+		},
+	}, drainRespChan(respChan))
 }
