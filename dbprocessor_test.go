@@ -14,12 +14,12 @@ func initWithEvents(repo *RepositoryMock, p *dbProcessor, events []Event) {
 	_ = p.init(context.Background())
 }
 
-func drainEventChan(ch <-chan Event) []Event {
+func drainCoreEventsChan(ch <-chan coreEvents) []Event {
 	var events []Event
 	for {
 		select {
 		case e := <-ch:
-			events = append(events, e)
+			events = append(events, e...)
 		default:
 			return events
 		}
@@ -27,12 +27,12 @@ func drainEventChan(ch <-chan Event) []Event {
 }
 
 func newDBProcessorWithRepo(repo Repository) *dbProcessor {
-	coreChan := make(chan Event, 1024)
-	return newDBProcessor(repo, coreChan)
+	coreChan := make(chan coreEvents, 1024)
+	return newDBProcessor(repo, coreChan, eventxOptions{})
 }
 
-func newDBProcessorWithRepoAndCoreChan(repo Repository, coreChan chan<- Event) *dbProcessor {
-	return newDBProcessor(repo, coreChan)
+func newDBProcessorWithRepoAndCoreChan(repo Repository, coreChan chan<- coreEvents) *dbProcessor {
+	return newDBProcessor(repo, coreChan, eventxOptions{})
 }
 
 func TestDBProcessor_Init_EmptyLastEvents(t *testing.T) {
@@ -76,7 +76,7 @@ func TestDBProcessor_Init_CoreChan_Events(t *testing.T) {
 	t.Parallel()
 
 	repo := &RepositoryMock{}
-	coreChan := make(chan Event, 1024)
+	coreChan := make(chan coreEvents, 1024)
 	p := newDBProcessorWithRepoAndCoreChan(repo, coreChan)
 
 	events := []Event{
@@ -89,8 +89,8 @@ func TestDBProcessor_Init_CoreChan_Events(t *testing.T) {
 	}
 	_ = p.init(context.Background())
 
-	assert.Equal(t, 3, len(coreChan))
-	coreEvents := drainEventChan(coreChan)
+	assert.Equal(t, 1, len(coreChan))
+	coreEvents := drainCoreEventsChan(coreChan)
 	assert.Equal(t, events, coreEvents)
 }
 
@@ -195,7 +195,7 @@ func TestDBProcessor_Signal_GetUnprocessedEvents_WithEvents_Update_OK(t *testing
 	t.Parallel()
 
 	repo := &RepositoryMock{}
-	coreChan := make(chan Event, 1024)
+	coreChan := make(chan coreEvents, 1024)
 	p := newDBProcessorWithRepoAndCoreChan(repo, coreChan)
 	initWithEvents(repo, p, nil)
 
@@ -214,19 +214,19 @@ func TestDBProcessor_Signal_GetUnprocessedEvents_WithEvents_Update_OK(t *testing
 
 	assert.Equal(t, nil, err)
 	assert.Equal(t, 1, len(repo.UpdateSequencesCalls()))
-	assert.Equal(t, 3, len(coreChan))
+	assert.Equal(t, 1, len(coreChan))
 	assert.Equal(t, []Event{
 		{ID: 10, Seq: 1},
 		{ID: 7, Seq: 2},
 		{ID: 13, Seq: 3},
-	}, drainEventChan(coreChan))
+	}, drainCoreEventsChan(coreChan))
 }
 
 func TestDBProcessor_Signal_With_Init_Events(t *testing.T) {
 	t.Parallel()
 
 	repo := &RepositoryMock{}
-	coreChan := make(chan Event, 1024)
+	coreChan := make(chan coreEvents, 1024)
 	p := newDBProcessorWithRepoAndCoreChan(repo, coreChan)
 	initWithEvents(repo, p, []Event{
 		{ID: 5, Seq: 50},
@@ -249,7 +249,7 @@ func TestDBProcessor_Signal_With_Init_Events(t *testing.T) {
 
 	assert.Equal(t, nil, err)
 	assert.Equal(t, 1, len(repo.UpdateSequencesCalls()))
-	assert.Equal(t, 6, len(coreChan))
+	assert.Equal(t, 2, len(coreChan))
 	assert.Equal(t, []Event{
 		{ID: 5, Seq: 50},
 		{ID: 8, Seq: 51},
@@ -257,14 +257,14 @@ func TestDBProcessor_Signal_With_Init_Events(t *testing.T) {
 		{ID: 10, Seq: 53},
 		{ID: 7, Seq: 54},
 		{ID: 13, Seq: 55},
-	}, drainEventChan(coreChan))
+	}, drainCoreEventsChan(coreChan))
 }
 
 func TestDBProcessor_Signal_With_Init_Events_Multiple_Signal(t *testing.T) {
 	t.Parallel()
 
 	repo := &RepositoryMock{}
-	coreChan := make(chan Event, 1024)
+	coreChan := make(chan coreEvents, 1024)
 	p := newDBProcessorWithRepoAndCoreChan(repo, coreChan)
 	initWithEvents(repo, p, []Event{
 		{ID: 5, Seq: 50},
@@ -288,6 +288,6 @@ func TestDBProcessor_Signal_With_Init_Events_Multiple_Signal(t *testing.T) {
 
 	assert.Equal(t, nil, err)
 	assert.Equal(t, 1, len(repo.UpdateSequencesCalls()))
-	assert.Equal(t, 6, len(coreChan))
+	assert.Equal(t, 2, len(coreChan))
 	assert.Equal(t, 0, len(p.signalChan))
 }

@@ -2,15 +2,17 @@ package eventx
 
 import "context"
 
+type coreEvents []Event
+
 type dbProcessor struct {
 	repo       Repository
-	coreChan   chan<- Event
+	coreChan   chan<- coreEvents
 	signalChan chan struct{}
 
 	lastSequence uint64
 }
 
-func newDBProcessor(repo Repository, coreChan chan<- Event) *dbProcessor {
+func newDBProcessor(repo Repository, coreChan chan<- coreEvents, options eventxOptions) *dbProcessor {
 	return &dbProcessor{
 		repo:       repo,
 		signalChan: make(chan struct{}, 1024),
@@ -24,12 +26,9 @@ func (p *dbProcessor) init(ctx context.Context) error {
 		return err
 	}
 
-	for _, e := range events {
-		p.coreChan <- e
-	}
-
 	if len(events) > 0 {
 		p.lastSequence = events[len(events)-1].Seq
+		p.coreChan <- events
 	}
 
 	return nil
@@ -58,9 +57,7 @@ func (p *dbProcessor) handleSignal(ctx context.Context) error {
 		return err
 	}
 
-	for _, e := range events {
-		p.coreChan <- e
-	}
+	p.coreChan <- events
 	return nil
 }
 
