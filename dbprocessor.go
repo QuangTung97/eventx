@@ -41,7 +41,10 @@ func (p *dbProcessor) init(ctx context.Context) error {
 }
 
 func (p *dbProcessor) signal() {
-	p.signalChan <- struct{}{}
+	select {
+	case p.signalChan <- struct{}{}:
+	default:
+	}
 }
 
 func (p *dbProcessor) handleSignal(ctx context.Context) error {
@@ -53,7 +56,10 @@ func (p *dbProcessor) handleSignal(ctx context.Context) error {
 		return nil
 	}
 	if len(events) >= int(p.options.getUnprocessedEventsLimit) {
-		p.signalChan <- struct{}{}
+		select {
+		case p.signalChan <- struct{}{}:
+		default:
+		}
 	}
 
 	for i := range events {
