@@ -3,6 +3,8 @@ package eventx
 import (
 	"context"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"testing"
 )
 
@@ -15,11 +17,37 @@ func drainRespChan(ch <-chan fetchResponse) fetchResponse {
 	}
 }
 
+type testEvent struct {
+	id  uint64
+	seq uint64
+}
+
+func (e testEvent) ProtoReflect() protoreflect.Message {
+	return nil
+}
+
+var _ proto.Message = testEvent{}
+
+func unmarshalEvent(e Event) proto.Message {
+	return testEvent{
+		id:  e.ID,
+		seq: e.Seq,
+	}
+}
+
+func getSequenceTest(e proto.Message) uint64 {
+	return (e.(testEvent)).seq
+}
+
+func newCoreServiceTest(coreChan <-chan coreEvents, opts eventxOptions) *coreService {
+	return newCoreService(coreChan, unmarshalEvent, opts)
+}
+
 func TestCoreServiceFetch_SimpleCase(t *testing.T) {
 	t.Parallel()
 
 	coreChan := make(chan coreEvents, 1024)
-	s := newCoreService(coreChan, computeOptions())
+	s := newCoreServiceTest(coreChan, computeOptions())
 
 	coreChan <- []Event{
 		{ID: 10, Seq: 20},
@@ -34,7 +62,7 @@ func TestCoreServiceFetch_SimpleCase(t *testing.T) {
 	s.fetch(fetchRequest{
 		limit:       2,
 		from:        20,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]proto.Message, 0, 100),
 		respChan:    respChan,
 	})
 	s.run(ctx)
@@ -44,7 +72,7 @@ func TestCoreServiceFetch_SimpleCase(t *testing.T) {
 	resp := drainRespChan(respChan)
 	assert.Equal(t, fetchResponse{
 		existed: true,
-		events: []UnmarshalledEvent{
+		events: []proto.Message{
 			unmarshalEvent(Event{ID: 10, Seq: 20}),
 			unmarshalEvent(Event{ID: 8, Seq: 21}),
 		},
@@ -55,7 +83,7 @@ func TestCoreServiceFetch_SimpleCase(t *testing.T) {
 func TestCoreServiceRun_ContextCancel(t *testing.T) {
 	t.Parallel()
 
-	s := newCoreService(nil, computeOptions())
+	s := newCoreServiceTest(nil, computeOptions())
 
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
@@ -68,7 +96,7 @@ func TestCoreServiceFetch_Behind(t *testing.T) {
 	t.Parallel()
 
 	coreChan := make(chan coreEvents, 1024)
-	s := newCoreService(coreChan, computeOptions())
+	s := newCoreServiceTest(coreChan, computeOptions())
 
 	coreChan <- []Event{
 		{ID: 8, Seq: 30},
@@ -81,7 +109,7 @@ func TestCoreServiceFetch_Behind(t *testing.T) {
 	s.fetch(fetchRequest{
 		limit:       2,
 		from:        20,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]proto.Message, 0, 100),
 		respChan:    respChan,
 	})
 	s.run(ctx)
@@ -98,7 +126,7 @@ func TestCoreServiceFetch_Multiple_Core_Events__Behind(t *testing.T) {
 	t.Parallel()
 
 	coreChan := make(chan coreEvents, 1024)
-	s := newCoreService(coreChan, computeOptions())
+	s := newCoreServiceTest(coreChan, computeOptions())
 
 	coreChan <- []Event{
 		{ID: 8, Seq: 30},
@@ -114,7 +142,7 @@ func TestCoreServiceFetch_Multiple_Core_Events__Behind(t *testing.T) {
 	s.fetch(fetchRequest{
 		limit:       2,
 		from:        30,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]proto.Message, 0, 100),
 		respChan:    respChan,
 	})
 	s.run(ctx)
@@ -123,7 +151,7 @@ func TestCoreServiceFetch_Multiple_Core_Events__Behind(t *testing.T) {
 	resp := drainRespChan(respChan)
 	assert.Equal(t, fetchResponse{
 		existed: true,
-		events: []UnmarshalledEvent{
+		events: []proto.Message{
 			unmarshalEvent(Event{ID: 8, Seq: 30}),
 			unmarshalEvent(Event{ID: 11, Seq: 31}),
 		},
@@ -135,7 +163,7 @@ func TestCoreServiceFetch_Limit_Exceed(t *testing.T) {
 	t.Parallel()
 
 	coreChan := make(chan coreEvents, 1024)
-	s := newCoreService(coreChan, computeOptions())
+	s := newCoreServiceTest(coreChan, computeOptions())
 
 	coreChan <- []Event{
 		{ID: 8, Seq: 30},
@@ -152,7 +180,7 @@ func TestCoreServiceFetch_Limit_Exceed(t *testing.T) {
 	s.fetch(fetchRequest{
 		limit:       5,
 		from:        30,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]proto.Message, 0, 100),
 		respChan:    respChan,
 	})
 	s.run(ctx)
@@ -161,7 +189,7 @@ func TestCoreServiceFetch_Limit_Exceed(t *testing.T) {
 	resp := drainRespChan(respChan)
 	assert.Equal(t, fetchResponse{
 		existed: true,
-		events: []UnmarshalledEvent{
+		events: []proto.Message{
 			unmarshalEvent(Event{ID: 8, Seq: 30}),
 			unmarshalEvent(Event{ID: 11, Seq: 31}),
 			unmarshalEvent(Event{ID: 15, Seq: 32}),
@@ -174,7 +202,7 @@ func TestCoreServiceFetch_Wrap_Around_And_Override_Not_Exist(t *testing.T) {
 	t.Parallel()
 
 	coreChan := make(chan coreEvents, 1024)
-	s := newCoreService(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
+	s := newCoreServiceTest(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
 
 	coreChan <- []Event{
 		{ID: 8, Seq: 30},
@@ -193,7 +221,7 @@ func TestCoreServiceFetch_Wrap_Around_And_Override_Not_Exist(t *testing.T) {
 	s.fetch(fetchRequest{
 		limit:       5,
 		from:        30,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]proto.Message, 0, 100),
 		respChan:    respChan,
 	})
 	s.run(ctx)
@@ -209,7 +237,7 @@ func TestCoreServiceFetch_Wrap_Around_And_Override_Exist(t *testing.T) {
 	t.Parallel()
 
 	coreChan := make(chan coreEvents, 1024)
-	s := newCoreService(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
+	s := newCoreServiceTest(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
 
 	coreChan <- []Event{
 		{ID: 8, Seq: 30},
@@ -228,7 +256,7 @@ func TestCoreServiceFetch_Wrap_Around_And_Override_Exist(t *testing.T) {
 	s.fetch(fetchRequest{
 		limit:       6,
 		from:        31,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]proto.Message, 0, 100),
 		respChan:    respChan,
 	})
 	s.run(ctx)
@@ -237,7 +265,7 @@ func TestCoreServiceFetch_Wrap_Around_And_Override_Exist(t *testing.T) {
 	resp := drainRespChan(respChan)
 	assert.Equal(t, fetchResponse{
 		existed: true,
-		events: []UnmarshalledEvent{
+		events: []proto.Message{
 			unmarshalEvent(Event{ID: 9, Seq: 31}),
 			unmarshalEvent(Event{ID: 11, Seq: 32}),
 			unmarshalEvent(Event{ID: 15, Seq: 33}),
@@ -250,7 +278,7 @@ func TestCoreServiceFetch_Add_To_Wait_List(t *testing.T) {
 	t.Parallel()
 
 	coreChan := make(chan coreEvents, 1024)
-	s := newCoreService(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
+	s := newCoreServiceTest(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
 
 	coreChan <- []Event{
 		{ID: 8, Seq: 30},
@@ -266,7 +294,7 @@ func TestCoreServiceFetch_Add_To_Wait_List(t *testing.T) {
 	s.fetch(fetchRequest{
 		limit:       2,
 		from:        35,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]proto.Message, 0, 100),
 		respChan:    respChan,
 	})
 	s.run(ctx)
@@ -282,7 +310,7 @@ func TestCoreServiceFetch_Add_To_Wait_List(t *testing.T) {
 	resp := drainRespChan(respChan)
 	assert.Equal(t, fetchResponse{
 		existed: true,
-		events: []UnmarshalledEvent{
+		events: []proto.Message{
 			unmarshalEvent(Event{ID: 20, Seq: 35}),
 		},
 	}, resp)
@@ -298,7 +326,7 @@ func TestCoreServiceFetch_Wait_To_The_Far_Future(t *testing.T) {
 	t.Parallel()
 
 	coreChan := make(chan coreEvents, 1024)
-	s := newCoreService(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
+	s := newCoreServiceTest(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
 
 	coreChan <- []Event{
 		{ID: 8, Seq: 30},
@@ -314,7 +342,7 @@ func TestCoreServiceFetch_Wait_To_The_Far_Future(t *testing.T) {
 	s.fetch(fetchRequest{
 		limit:       2,
 		from:        36,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]proto.Message, 0, 100),
 		respChan:    respChan,
 	})
 	s.run(ctx)
@@ -337,7 +365,7 @@ func TestCoreServiceFetch_Wait_To_The_Far_Future(t *testing.T) {
 	resp := drainRespChan(respChan)
 	assert.Equal(t, fetchResponse{
 		existed: true,
-		events: []UnmarshalledEvent{
+		events: []proto.Message{
 			unmarshalEvent(Event{ID: 22, Seq: 36}),
 			unmarshalEvent(Event{ID: 23, Seq: 37}),
 		},
@@ -348,7 +376,7 @@ func TestCoreServiceFetch_Core_Events_Not_In_Order__Not_Existed(t *testing.T) {
 	t.Parallel()
 
 	coreChan := make(chan coreEvents, 1024)
-	s := newCoreService(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
+	s := newCoreServiceTest(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
 
 	coreChan <- []Event{
 		{ID: 8, Seq: 30},
@@ -369,7 +397,7 @@ func TestCoreServiceFetch_Core_Events_Not_In_Order__Not_Existed(t *testing.T) {
 	s.fetch(fetchRequest{
 		limit:       3,
 		from:        37,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]proto.Message, 0, 100),
 		respChan:    respChan,
 	})
 	s.run(ctx)
@@ -383,7 +411,7 @@ func TestCoreServiceFetch_Core_Events_Not_In_Order__Existed(t *testing.T) {
 	t.Parallel()
 
 	coreChan := make(chan coreEvents, 1024)
-	s := newCoreService(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
+	s := newCoreServiceTest(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
 
 	coreChan <- []Event{
 		{ID: 8, Seq: 30},
@@ -404,14 +432,14 @@ func TestCoreServiceFetch_Core_Events_Not_In_Order__Existed(t *testing.T) {
 	s.fetch(fetchRequest{
 		limit:       3,
 		from:        38,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]proto.Message, 0, 100),
 		respChan:    respChan,
 	})
 	s.run(ctx)
 	assert.Equal(t, 1, len(respChan))
 	assert.Equal(t, fetchResponse{
 		existed: true,
-		events: []UnmarshalledEvent{
+		events: []proto.Message{
 			unmarshalEvent(Event{ID: 14, Seq: 38}),
 			unmarshalEvent(Event{ID: 12, Seq: 39}),
 			unmarshalEvent(Event{ID: 18, Seq: 40}),
@@ -423,7 +451,7 @@ func TestCoreServiceFetch_Wait_And_Events_Not_In_Order(t *testing.T) {
 	t.Parallel()
 
 	coreChan := make(chan coreEvents, 1024)
-	s := newCoreService(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
+	s := newCoreServiceTest(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
 
 	coreChan <- []Event{
 		{ID: 8, Seq: 30},
@@ -437,7 +465,7 @@ func TestCoreServiceFetch_Wait_And_Events_Not_In_Order(t *testing.T) {
 	s.fetch(fetchRequest{
 		limit:       3,
 		from:        34,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]proto.Message, 0, 100),
 		respChan:    respChan,
 	})
 	s.run(ctx)
@@ -461,7 +489,7 @@ func TestCoreServiceFetch_Core_Events_Go_Backward(t *testing.T) {
 	t.Parallel()
 
 	coreChan := make(chan coreEvents, 1024)
-	s := newCoreService(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
+	s := newCoreServiceTest(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
 
 	coreChan <- []Event{
 		{ID: 8, Seq: 30},
@@ -482,7 +510,7 @@ func TestCoreServiceFetch_Core_Events_Go_Backward(t *testing.T) {
 	s.fetch(fetchRequest{
 		limit:       6,
 		from:        20,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]proto.Message, 0, 100),
 		respChan:    respChan,
 	})
 	s.run(ctx)
@@ -490,7 +518,7 @@ func TestCoreServiceFetch_Core_Events_Go_Backward(t *testing.T) {
 	assert.Equal(t, 1, len(respChan))
 	assert.Equal(t, fetchResponse{
 		existed: true,
-		events: []UnmarshalledEvent{
+		events: []proto.Message{
 			unmarshalEvent(Event{ID: 14, Seq: 20}),
 			unmarshalEvent(Event{ID: 12, Seq: 21}),
 			unmarshalEvent(Event{ID: 18, Seq: 22}),

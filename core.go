@@ -2,36 +2,40 @@ package eventx
 
 import (
 	"context"
+	"google.golang.org/protobuf/proto"
 )
 
 type fetchRequest struct {
 	limit       uint64
 	from        uint64
-	placeholder []UnmarshalledEvent
+	placeholder []proto.Message
 	respChan    chan<- fetchResponse
 }
 
 type fetchResponse struct {
 	existed bool
-	events  []UnmarshalledEvent
+	events  []proto.Message
 }
 
 type coreService struct {
 	coreChan  <-chan coreEvents
 	fetchChan chan fetchRequest
+	unmarshal UnmarshalEvent
 
-	storedEvents []UnmarshalledEvent
+	storedEvents []proto.Message
 	first        uint64
 	last         uint64
 
 	waitList []fetchRequest
 }
 
-func newCoreService(coreChan <-chan coreEvents, options eventxOptions) *coreService {
+func newCoreService(coreChan <-chan coreEvents, unmarshal UnmarshalEvent, options eventxOptions) *coreService {
 	return &coreService{
-		coreChan:     coreChan,
-		fetchChan:    make(chan fetchRequest, 256),
-		storedEvents: make([]UnmarshalledEvent, options.coreStoredEventsSize),
+		coreChan:  coreChan,
+		fetchChan: make(chan fetchRequest, 256),
+		unmarshal: unmarshal,
+
+		storedEvents: make([]proto.Message, options.coreStoredEventsSize),
 		first:        0,
 		last:         0,
 	}
@@ -92,7 +96,7 @@ func (s *coreService) run(ctx context.Context) {
 		}
 
 		for _, e := range events {
-			s.storedEvents[e.Seq%size] = unmarshalEvent(e)
+			s.storedEvents[e.Seq%size] = s.unmarshal(e)
 		}
 		s.handleWaitList()
 

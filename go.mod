@@ -10,4 +10,5 @@ require (
 	go.uber.org/zap v1.17.0
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616
 	golang.org/x/tools v0.0.0-20200815165600-90abf76919f3 // indirect
+	google.golang.org/protobuf v1.26.0
 )
