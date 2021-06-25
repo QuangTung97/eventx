@@ -47,19 +47,30 @@ func (p *dbProcessor) signal() {
 	}
 }
 
-func (p *dbProcessor) handleSignal(ctx context.Context) error {
+func (p *dbProcessor) handleSignalLoop(ctx context.Context) error {
+	for {
+		continued, err := p.handleSignal(ctx)
+		if err != nil {
+			return err
+		}
+		if !continued {
+			return nil
+		}
+	}
+}
+
+func (p *dbProcessor) handleSignal(ctx context.Context) (bool, error) {
+	continued := false
+
 	events, err := p.repo.GetUnprocessedEvents(ctx, p.options.getUnprocessedEventsLimit)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if len(events) == 0 {
-		return nil
+		return false, nil
 	}
 	if len(events) >= int(p.options.getUnprocessedEventsLimit) {
-		select {
-		case p.signalChan <- struct{}{}:
-		default:
-		}
+		continued = true
 	}
 
 	for i := range events {
@@ -69,11 +80,11 @@ func (p *dbProcessor) handleSignal(ctx context.Context) error {
 
 	err = p.repo.UpdateSequences(ctx, events)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	p.coreChan <- events
-	return nil
+	return continued, nil
 }
 
 func (p *dbProcessor) run(ctx context.Context) error {
@@ -89,11 +100,11 @@ func (p *dbProcessor) run(ctx context.Context) error {
 				break BatchLoop
 			}
 		}
-		return p.handleSignal(ctx)
+		return p.handleSignalLoop(ctx)
 
 	case <-p.retryTimer.Chan():
 		p.retryTimer.ResetAfterChan()
-		return p.handleSignal(ctx)
+		return p.handleSignalLoop(ctx)
 
 	case <-ctx.Done():
 		return nil

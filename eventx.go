@@ -161,7 +161,7 @@ func cloneAndClearEvents(events []UnmarshalledEvent) []UnmarshalledEvent {
 	return result
 }
 
-// Fetch get events
+// Fetch get events, must NOT reuse the Subscriber after ctx has cancelled
 func (s *Subscriber) Fetch(ctx context.Context) ([]UnmarshalledEvent, error) {
 	s.core.fetch(fetchRequest{
 		from:        s.from,

@@ -246,12 +246,18 @@ func TestDBProcessor_Signal_GetUnprocessedEvents_Reach_Limit__Resend_Signal(t *t
 	))
 	initWithEvents(repo, p, nil)
 
-	getUnprocessedWithEvents(repo, []Event{
+	events := []Event{
 		{ID: 10},
 		{ID: 7},
 		{ID: 13},
 		{ID: 18},
-	})
+	}
+	repo.GetUnprocessedEventsFunc = func(ctx context.Context, limit uint64) ([]Event, error) {
+		if len(repo.GetUnprocessedEventsCalls()) > 1 {
+			return []Event{{ID: 33}}, nil
+		}
+		return events, nil
+	}
 
 	repo.UpdateSequencesFunc = func(ctx context.Context, events []Event) error {
 		return nil
@@ -261,16 +267,17 @@ func TestDBProcessor_Signal_GetUnprocessedEvents_Reach_Limit__Resend_Signal(t *t
 	err := p.run(context.Background())
 
 	assert.Equal(t, nil, err)
-	assert.Equal(t, 1, len(repo.UpdateSequencesCalls()))
-	assert.Equal(t, 1, len(coreChan))
+	assert.Equal(t, 2, len(repo.UpdateSequencesCalls()))
+	assert.Equal(t, 2, len(coreChan))
 	assert.Equal(t, []Event{
 		{ID: 10, Seq: 1},
 		{ID: 7, Seq: 2},
 		{ID: 13, Seq: 3},
 		{ID: 18, Seq: 4},
+		{ID: 33, Seq: 5},
 	}, drainCoreEventsChan(coreChan))
 
-	assert.Equal(t, 1, len(p.signalChan))
+	assert.Equal(t, 0, len(p.signalChan))
 }
 
 func TestDBProcessor_Signal_GetUnprocessedEvents_Near_Reach_Limit__Not_Resend_Signal(t *testing.T) {
