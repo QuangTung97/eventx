@@ -54,8 +54,10 @@ type Runner struct {
 
 // Subscriber for subscribing to events
 type Subscriber struct {
-	from        uint64
-	fetchLimit  uint64
+	from           uint64
+	fetchLimit     uint64
+	fetchSizeLimit uint64
+
 	repo        Repository
 	unmarshal   UnmarshalEvent
 	getSequence GetSequence
@@ -157,10 +159,14 @@ func (r *Runner) Signal() {
 }
 
 // NewSubscriber creates a subscriber
-func (r *Runner) NewSubscriber(from uint64, fetchLimit uint64) *Subscriber {
+func (r *Runner) NewSubscriber(from uint64, fetchLimit uint64, options ...SubscriberOption) *Subscriber {
+	opts := computeSubscriberOptions(options...)
+
 	return &Subscriber{
-		from:        from,
-		fetchLimit:  fetchLimit,
+		from:           from,
+		fetchLimit:     fetchLimit,
+		fetchSizeLimit: opts.sizeLimit,
+
 		repo:        r.repo,
 		unmarshal:   r.unmarshal,
 		getSequence: r.getSequence,
@@ -180,11 +186,12 @@ func cloneAndClearEvents(events []proto.Message) []proto.Message {
 	return result
 }
 
-// Fetch get events, must NOT reuse the Subscriber after ctx has cancelled
+// Fetch get events
 func (s *Subscriber) Fetch(ctx context.Context) ([]proto.Message, error) {
 	s.core.fetch(fetchRequest{
 		from:        s.from,
 		limit:       s.fetchLimit,
+		sizeLimit:   s.fetchSizeLimit,
 		placeholder: s.placeholder,
 		respChan:    s.respChan,
 	})

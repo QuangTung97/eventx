@@ -43,6 +43,41 @@ func TestSubscriber(t *testing.T) {
 	wg.Wait()
 }
 
+func TestSubscriber_WithSizeLimit(t *testing.T) {
+	repo := &RepositoryMock{}
+	r := NewRunner(repo, unmarshalEvent, getSequenceTest)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]Event, error) {
+		return []Event{
+			{ID: 30, Seq: 18, Data: stringSize(10)},
+			{ID: 28, Seq: 19, Data: stringSize(11)},
+			{ID: 33, Seq: 20, Data: stringSize(12)},
+			{ID: 32, Seq: 21, Data: stringSize(13)},
+		}, nil
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		r.Run(ctx)
+	}()
+
+	sub := r.NewSubscriber(18, 5, WithSubscriberSizeLimit(32))
+	events, err := sub.Fetch(ctx)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, []proto.Message{
+		unmarshalEvent(Event{ID: 30, Seq: 18}),
+		unmarshalEvent(Event{ID: 28, Seq: 19}),
+	}, events)
+
+	cancel()
+	wg.Wait()
+}
+
 func TestSubscriber_Not_Existed(t *testing.T) {
 	repo := &RepositoryMock{}
 	r := NewRunner(repo, unmarshalEvent, getSequenceTest)

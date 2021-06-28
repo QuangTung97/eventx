@@ -77,3 +77,31 @@ func WithLogger(logger *zap.Logger) Option {
 		opts.logger = logger
 	}
 }
+
+//=================================================================
+// Subscriber Options
+//=================================================================
+
+type subscriberOptions struct {
+	sizeLimit uint64
+}
+
+// SubscriberOption for customizing subscribers
+type SubscriberOption func(opts *subscriberOptions)
+
+func computeSubscriberOptions(opts ...SubscriberOption) subscriberOptions {
+	result := subscriberOptions{
+		sizeLimit: 2 << 20, // 2MB
+	}
+	for _, o := range opts {
+		o(&result)
+	}
+	return result
+}
+
+// WithSubscriberSizeLimit configures limit in size of Fetch batches
+func WithSubscriberSizeLimit(sizeLimit uint64) SubscriberOption {
+	return func(opts *subscriberOptions) {
+		opts.sizeLimit = sizeLimit
+	}
+}
