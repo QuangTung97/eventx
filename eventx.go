@@ -65,6 +65,7 @@ type Subscriber struct {
 	core        *coreService
 	respChan    chan fetchResponse
 	placeholder []proto.Message
+	receiving   bool
 }
 
 // NewRunner creates a Runner
@@ -188,16 +189,21 @@ func cloneAndClearEvents(events []proto.Message) []proto.Message {
 
 // Fetch get events
 func (s *Subscriber) Fetch(ctx context.Context) ([]proto.Message, error) {
-	s.core.fetch(fetchRequest{
-		from:        s.from,
-		limit:       s.fetchLimit,
-		sizeLimit:   s.fetchSizeLimit,
-		placeholder: s.placeholder,
-		respChan:    s.respChan,
-	})
+	if !s.receiving {
+		s.core.fetch(fetchRequest{
+			from:        s.from,
+			limit:       s.fetchLimit,
+			sizeLimit:   s.fetchSizeLimit,
+			placeholder: s.placeholder,
+			respChan:    s.respChan,
+		})
+		s.receiving = true
+	}
 
 	select {
 	case resp := <-s.respChan:
+		s.receiving = false
+
 		if !resp.existed {
 			events, err := s.repo.GetEventsFrom(ctx, s.from, s.fetchLimit)
 			if err != nil {

@@ -78,6 +78,58 @@ func TestSubscriber_WithSizeLimit(t *testing.T) {
 	wg.Wait()
 }
 
+func TestSubscriber_Context_Cancelled_Continue(t *testing.T) {
+	repo := &RepositoryMock{}
+	r := NewRunner(repo, unmarshalEvent, getSequenceTest)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]Event, error) {
+		return []Event{
+			{ID: 30, Seq: 18, Data: stringSize(10)},
+			{ID: 28, Seq: 19, Data: stringSize(11)},
+			{ID: 33, Seq: 20, Data: stringSize(12)},
+			{ID: 32, Seq: 21, Data: stringSize(13)},
+		}, nil
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		r.Run(ctx)
+	}()
+
+	sub := r.NewSubscriber(18, 2)
+
+	fetchCtx, fetchCancel := context.WithCancel(context.Background())
+	fetchCancel()
+
+	events, err := sub.Fetch(fetchCtx)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, []proto.Message(nil), events)
+
+	events, err = sub.Fetch(ctx)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, []proto.Message{
+		testEvent{id: 30, seq: 18},
+		testEvent{id: 28, seq: 19},
+	}, events)
+
+	events, err = sub.Fetch(ctx)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, []proto.Message{
+		testEvent{id: 33, seq: 20},
+		testEvent{id: 32, seq: 21},
+	}, events)
+
+	cancel()
+	wg.Wait()
+
+	assert.Equal(t, 0, len(sub.respChan))
+}
+
 func TestSubscriber_Not_Existed(t *testing.T) {
 	repo := &RepositoryMock{}
 	r := NewRunner(repo, unmarshalEvent, getSequenceTest)
