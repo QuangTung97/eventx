@@ -6,8 +6,9 @@ import (
 )
 
 type fetchRequest struct {
-	limit       uint64
 	from        uint64
+	limit       uint64
+	sizeLimit   uint64
 	placeholder []proto.Message
 	respChan    chan<- fetchResponse
 }
@@ -17,12 +18,17 @@ type fetchResponse struct {
 	events  []proto.Message
 }
 
+type storedEvent struct {
+	event proto.Message
+	size  uint64
+}
+
 type coreService struct {
 	coreChan  <-chan coreEvents
 	fetchChan chan fetchRequest
 	unmarshal UnmarshalEvent
 
-	storedEvents []proto.Message
+	storedEvents []storedEvent
 	first        uint64
 	last         uint64
 
@@ -35,13 +41,15 @@ func newCoreService(coreChan <-chan coreEvents, unmarshal UnmarshalEvent, option
 		fetchChan: make(chan fetchRequest, 256),
 		unmarshal: unmarshal,
 
-		storedEvents: make([]proto.Message, options.coreStoredEventsSize),
+		storedEvents: make([]storedEvent, options.coreStoredEventsSize),
 		first:        0,
 		last:         0,
 	}
 }
 
-func computeRequestToResponse(req fetchRequest, first uint64, last uint64, storedEvents []proto.Message) fetchResponse {
+func computeRequestToResponse(
+	req fetchRequest, first uint64, last uint64, storedEvents []storedEvent,
+) fetchResponse {
 	if req.from < first {
 		return fetchResponse{
 			existed: false,
@@ -57,7 +65,7 @@ func computeRequestToResponse(req fetchRequest, first uint64, last uint64, store
 
 	size := uint64(len(storedEvents))
 	for i := req.from; i < end; i++ {
-		events = append(events, storedEvents[i%size])
+		events = append(events, storedEvents[i%size].event)
 	}
 	return fetchResponse{
 		existed: true,
@@ -110,7 +118,10 @@ func (s *coreService) run(ctx context.Context) {
 		}
 
 		for _, e := range events {
-			s.storedEvents[e.Seq%size] = s.unmarshal(e)
+			s.storedEvents[e.Seq%size] = storedEvent{
+				event: s.unmarshal(e),
+				// TODO size
+			}
 		}
 		s.handleWaitList()
 

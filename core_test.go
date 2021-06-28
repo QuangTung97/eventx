@@ -526,6 +526,117 @@ func TestCoreServiceFetch_Core_Events_Go_Backward(t *testing.T) {
 	}, drainRespChan(respChan))
 }
 
+func TestComputeRequestToResponse(t *testing.T) {
+	table := []struct {
+		name   string
+		req    fetchRequest
+		first  uint64
+		last   uint64
+		stored []storedEvent
+		resp   fetchResponse
+	}{
+		{
+			name: "normal",
+			req: fetchRequest{
+				from:  10,
+				limit: 4,
+			},
+			stored: []storedEvent{
+				{event: testEvent{id: 12, seq: 12}},
+				{event: testEvent{id: 13, seq: 13}},
+				{event: testEvent{id: 10, seq: 10}},
+				{event: testEvent{id: 11, seq: 11}},
+			},
+			first: 10,
+			last:  14,
+			resp: fetchResponse{
+				existed: true,
+				events: []proto.Message{
+					testEvent{id: 10, seq: 10},
+					testEvent{id: 11, seq: 11},
+					testEvent{id: 12, seq: 12},
+					testEvent{id: 13, seq: 13},
+				},
+			},
+		},
+		{
+			name: "limit-below-last",
+			req: fetchRequest{
+				from:  10,
+				limit: 3,
+			},
+			stored: []storedEvent{
+				{event: testEvent{id: 12, seq: 12}},
+				{event: testEvent{id: 13, seq: 13}},
+				{event: testEvent{id: 10, seq: 10}},
+				{event: testEvent{id: 11, seq: 11}},
+			},
+			first: 10,
+			last:  14,
+			resp: fetchResponse{
+				existed: true,
+				events: []proto.Message{
+					testEvent{id: 10, seq: 10},
+					testEvent{id: 11, seq: 11},
+					testEvent{id: 12, seq: 12},
+				},
+			},
+		},
+		{
+			name: "limit-above-last",
+			req: fetchRequest{
+				from:  10,
+				limit: 5,
+			},
+			stored: []storedEvent{
+				{event: testEvent{id: 12, seq: 12}},
+				{event: testEvent{id: 13, seq: 13}},
+				{event: testEvent{id: 10, seq: 10}},
+				{event: testEvent{id: 11, seq: 11}},
+			},
+			first: 10,
+			last:  14,
+			resp: fetchResponse{
+				existed: true,
+				events: []proto.Message{
+					testEvent{id: 10, seq: 10},
+					testEvent{id: 11, seq: 11},
+					testEvent{id: 12, seq: 12},
+					testEvent{id: 13, seq: 13},
+				},
+			},
+		},
+		{
+			name: "non-existed",
+			req: fetchRequest{
+				from:  9,
+				limit: 3,
+			},
+			stored: []storedEvent{
+				{event: testEvent{id: 12, seq: 12}},
+				{event: testEvent{id: 13, seq: 13}},
+				{event: testEvent{id: 10, seq: 10}},
+				{event: testEvent{id: 11, seq: 11}},
+			},
+			first: 10,
+			last:  14,
+			resp: fetchResponse{
+				existed: false,
+			},
+		},
+	}
+
+	for _, tc := range table {
+		e := tc
+		t.Run(e.name, func(t *testing.T) {
+			t.Parallel()
+
+			resp := computeRequestToResponse(e.req, e.first, e.last, e.stored)
+			assert.Equal(t, e.resp, resp)
+		})
+	}
+}
+
 func TestWaitListRemoveIf(t *testing.T) {
 	table := []struct {
 		name     string
