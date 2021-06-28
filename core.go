@@ -63,9 +63,16 @@ func computeRequestToResponse(
 		end = last
 	}
 
-	size := uint64(len(storedEvents))
+	size := uint64(0)
+	storeSize := uint64(len(storedEvents))
 	for i := req.from; i < end; i++ {
-		events = append(events, storedEvents[i%size].event)
+		stored := storedEvents[i%storeSize]
+		size += stored.size
+		if i > req.from && req.sizeLimit > 0 && size > req.sizeLimit {
+			break
+		}
+
+		events = append(events, stored.event)
 	}
 	return fetchResponse{
 		existed: true,
@@ -120,7 +127,7 @@ func (s *coreService) run(ctx context.Context) {
 		for _, e := range events {
 			s.storedEvents[e.Seq%size] = storedEvent{
 				event: s.unmarshal(e),
-				// TODO size
+				size:  uint64(len(e.Data)),
 			}
 		}
 		s.handleWaitList()

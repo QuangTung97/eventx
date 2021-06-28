@@ -198,6 +198,49 @@ func TestCoreServiceFetch_Limit_Exceed(t *testing.T) {
 	assert.Equal(t, 100, cap(resp.events))
 }
 
+func stringSize(n int) string {
+	return string(make([]byte, n))
+}
+
+func TestCoreServiceFetch_SizeLimit_Exceed(t *testing.T) {
+	t.Parallel()
+
+	coreChan := make(chan coreEvents, 1024)
+	s := newCoreServiceTest(coreChan, computeOptions())
+
+	coreChan <- []Event{
+		{ID: 8, Seq: 30, Data: stringSize(10)},
+	}
+	coreChan <- []Event{
+		{ID: 11, Seq: 31, Data: stringSize(11)},
+		{ID: 15, Seq: 32, Data: stringSize(12)},
+	}
+	ctx := context.Background()
+	s.run(ctx)
+	s.run(ctx)
+
+	respChan := make(chan fetchResponse, 1)
+	s.fetch(fetchRequest{
+		from:        30,
+		limit:       5,
+		sizeLimit:   32,
+		placeholder: make([]proto.Message, 0, 100),
+		respChan:    respChan,
+	})
+	s.run(ctx)
+
+	assert.Equal(t, 1, len(respChan))
+	resp := drainRespChan(respChan)
+	assert.Equal(t, fetchResponse{
+		existed: true,
+		events: []proto.Message{
+			unmarshalEvent(Event{ID: 8, Seq: 30}),
+			unmarshalEvent(Event{ID: 11, Seq: 31}),
+		},
+	}, resp)
+	assert.Equal(t, 100, cap(resp.events))
+}
+
 func TestCoreServiceFetch_Wrap_Around_And_Override_Not_Exist(t *testing.T) {
 	t.Parallel()
 
@@ -542,10 +585,10 @@ func TestComputeRequestToResponse(t *testing.T) {
 				limit: 4,
 			},
 			stored: []storedEvent{
-				{event: testEvent{id: 12, seq: 12}},
-				{event: testEvent{id: 13, seq: 13}},
-				{event: testEvent{id: 10, seq: 10}},
-				{event: testEvent{id: 11, seq: 11}},
+				{event: testEvent{id: 12, seq: 12}, size: 1},
+				{event: testEvent{id: 13, seq: 13}, size: 1},
+				{event: testEvent{id: 10, seq: 10}, size: 1},
+				{event: testEvent{id: 11, seq: 11}, size: 1},
 			},
 			first: 10,
 			last:  14,
@@ -622,6 +665,120 @@ func TestComputeRequestToResponse(t *testing.T) {
 			last:  14,
 			resp: fetchResponse{
 				existed: false,
+			},
+		},
+		{
+			name: "size-limit-accept-two-events",
+			req: fetchRequest{
+				from:      10,
+				limit:     3,
+				sizeLimit: 10,
+			},
+			stored: []storedEvent{
+				{event: testEvent{id: 12, seq: 12}, size: 1},
+				{event: testEvent{id: 13, seq: 13}, size: 2},
+				{event: testEvent{id: 10, seq: 10}, size: 3},
+				{event: testEvent{id: 11, seq: 11}, size: 7},
+			},
+			first: 10,
+			last:  14,
+			resp: fetchResponse{
+				existed: true,
+				events: []proto.Message{
+					testEvent{id: 10, seq: 10},
+					testEvent{id: 11, seq: 11},
+				},
+			},
+		},
+		{
+			name: "size-limit-smaller-than-first-event",
+			req: fetchRequest{
+				from:      10,
+				limit:     3,
+				sizeLimit: 4,
+			},
+			stored: []storedEvent{
+				{event: testEvent{id: 12, seq: 12}, size: 1},
+				{event: testEvent{id: 13, seq: 13}, size: 2},
+				{event: testEvent{id: 10, seq: 10}, size: 5},
+				{event: testEvent{id: 11, seq: 11}, size: 7},
+			},
+			first: 10,
+			last:  14,
+			resp: fetchResponse{
+				existed: true,
+				events: []proto.Message{
+					testEvent{id: 10, seq: 10},
+				},
+			},
+		},
+		{
+			name: "size-limit-just-equal-first-event",
+			req: fetchRequest{
+				from:      10,
+				limit:     3,
+				sizeLimit: 5,
+			},
+			stored: []storedEvent{
+				{event: testEvent{id: 12, seq: 12}, size: 1},
+				{event: testEvent{id: 13, seq: 13}, size: 2},
+				{event: testEvent{id: 10, seq: 10}, size: 5},
+				{event: testEvent{id: 11, seq: 11}, size: 7},
+			},
+			first: 10,
+			last:  14,
+			resp: fetchResponse{
+				existed: true,
+				events: []proto.Message{
+					testEvent{id: 10, seq: 10},
+				},
+			},
+		},
+		{
+			name: "size-limit-two-events",
+			req: fetchRequest{
+				from:      10,
+				limit:     3,
+				sizeLimit: 19,
+			},
+			stored: []storedEvent{
+				{event: testEvent{id: 12, seq: 12}, size: 8},
+				{event: testEvent{id: 13, seq: 13}, size: 2},
+				{event: testEvent{id: 10, seq: 10}, size: 5},
+				{event: testEvent{id: 11, seq: 11}, size: 7},
+			},
+			first: 10,
+			last:  14,
+			resp: fetchResponse{
+				existed: true,
+				events: []proto.Message{
+					testEvent{id: 10, seq: 10},
+					testEvent{id: 11, seq: 11},
+				},
+			},
+		},
+		{
+			name: "size-limit-three-events",
+			req: fetchRequest{
+				from:      10,
+				limit:     3,
+				sizeLimit: 20,
+			},
+			stored: []storedEvent{
+				{event: testEvent{id: 12, seq: 12}, size: 8},
+				{event: testEvent{id: 13, seq: 13}, size: 2},
+				{event: testEvent{id: 10, seq: 10}, size: 5},
+				{event: testEvent{id: 11, seq: 11}, size: 7},
+			},
+			first: 10,
+			last:  14,
+			resp: fetchResponse{
+				existed: true,
+				events: []proto.Message{
+					testEvent{id: 10, seq: 10},
+					testEvent{id: 11, seq: 11},
+					testEvent{id: 12, seq: 12},
+				},
 			},
 		},
 	}
