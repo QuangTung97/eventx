@@ -41,44 +41,58 @@ func newCoreService(coreChan <-chan coreEvents, unmarshal UnmarshalEvent, option
 	}
 }
 
-func (s *coreService) requestToResponse(req fetchRequest) {
-	if req.from < s.first {
-		req.respChan <- fetchResponse{
+func computeRequestToResponse(req fetchRequest, first uint64, last uint64, storedEvents []proto.Message) fetchResponse {
+	if req.from < first {
+		return fetchResponse{
 			existed: false,
 		}
-		return
 	}
 
 	events := req.placeholder
 
-	last := req.from + req.limit
-	if last > s.last {
-		last = s.last
+	end := req.from + req.limit
+	if end > last {
+		end = last
 	}
 
-	size := uint64(len(s.storedEvents))
-	for i := req.from; i < last; i++ {
-		events = append(events, s.storedEvents[i%size])
+	size := uint64(len(storedEvents))
+	for i := req.from; i < end; i++ {
+		events = append(events, storedEvents[i%size])
 	}
-	req.respChan <- fetchResponse{
+	return fetchResponse{
 		existed: true,
 		events:  events,
 	}
 }
 
-func (s *coreService) handleWaitList() {
-	clearPos := len(s.waitList)
-	for i, waitReq := range s.waitList {
-		if waitReq.from < s.last {
-			s.requestToResponse(waitReq)
-			clearPos--
-			s.waitList[i] = s.waitList[clearPos]
+func (s *coreService) requestToResponse(req fetchRequest) {
+	resp := computeRequestToResponse(req, s.first, s.last, s.storedEvents)
+	req.respChan <- resp
+}
+
+func waitListRemoveIf(waitList []fetchRequest, fn func(req fetchRequest) bool) int {
+	clearIndex := len(waitList)
+	for i := 0; i < clearIndex; {
+		req := waitList[i]
+		if !fn(req) {
+			i++
+			continue
 		}
+		clearIndex--
+		waitList[i], waitList[clearIndex] = waitList[clearIndex], waitList[i]
 	}
-	for i := clearPos; i < len(s.waitList); i++ {
+	return clearIndex
+}
+
+func (s *coreService) handleWaitList() {
+	offset := waitListRemoveIf(s.waitList, func(req fetchRequest) bool {
+		return req.from < s.last
+	})
+	for i, waitReq := range s.waitList[offset:] {
+		s.requestToResponse(waitReq)
 		s.waitList[i] = fetchRequest{}
 	}
-	s.waitList = s.waitList[:clearPos]
+	s.waitList = s.waitList[:offset]
 }
 
 func (s *coreService) run(ctx context.Context) {

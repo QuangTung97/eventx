@@ -525,3 +525,107 @@ func TestCoreServiceFetch_Core_Events_Go_Backward(t *testing.T) {
 		},
 	}, drainRespChan(respChan))
 }
+
+func TestWaitListRemoveIf(t *testing.T) {
+	table := []struct {
+		name     string
+		waitList []fetchRequest
+		last     uint64
+		offset   int
+		expected []fetchRequest
+	}{
+		{
+			name: "no-remove",
+			waitList: []fetchRequest{
+				{limit: 1, from: 10},
+				{limit: 2, from: 8},
+				{limit: 3, from: 9},
+			},
+			last:   8,
+			offset: 3,
+			expected: []fetchRequest{
+				{limit: 1, from: 10},
+				{limit: 2, from: 8},
+				{limit: 3, from: 9},
+			},
+		},
+		{
+			name: "single-remove",
+			waitList: []fetchRequest{
+				{limit: 1, from: 10},
+				{limit: 2, from: 8},
+				{limit: 3, from: 9},
+			},
+			last:   9,
+			offset: 2,
+			expected: []fetchRequest{
+				{limit: 1, from: 10},
+				{limit: 3, from: 9},
+				{limit: 2, from: 8},
+			},
+		},
+		{
+			name: "two-remove",
+			waitList: []fetchRequest{
+				{limit: 1, from: 10},
+				{limit: 2, from: 8},
+				{limit: 3, from: 9},
+			},
+			last:   10,
+			offset: 1,
+			expected: []fetchRequest{
+				{limit: 1, from: 10},
+				{limit: 3, from: 9},
+				{limit: 2, from: 8},
+			},
+		},
+		{
+			name: "all-remove",
+			waitList: []fetchRequest{
+				{limit: 1, from: 10},
+				{limit: 2, from: 8},
+				{limit: 3, from: 9},
+			},
+			last:   11,
+			offset: 0,
+			expected: []fetchRequest{
+				{limit: 2, from: 8},
+				{limit: 3, from: 9},
+				{limit: 1, from: 10},
+			},
+		},
+		{
+			name: "normal",
+			waitList: []fetchRequest{
+				{limit: 0, from: 7},
+				{limit: 1, from: 10},
+				{limit: 2, from: 8},
+				{limit: 3, from: 9},
+				{limit: 4, from: 11},
+				{limit: 5, from: 10},
+			},
+			last:   10,
+			offset: 3,
+			expected: []fetchRequest{
+				{limit: 5, from: 10},
+				{limit: 1, from: 10},
+				{limit: 4, from: 11},
+				{limit: 3, from: 9},
+				{limit: 2, from: 8},
+				{limit: 0, from: 7},
+			},
+		},
+	}
+
+	for _, tc := range table {
+		e := tc
+		t.Run(e.name, func(t *testing.T) {
+			t.Parallel()
+			offset := waitListRemoveIf(e.waitList, func(req fetchRequest) bool {
+				return req.from < e.last
+			})
+			assert.Equal(t, e.offset, offset)
+			assert.Equal(t, e.expected, e.waitList)
+		})
+	}
+}
