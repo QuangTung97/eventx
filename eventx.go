@@ -226,3 +226,18 @@ func (s *Subscriber) Fetch(ctx context.Context) ([]proto.Message, error) {
 		return nil, nil
 	}
 }
+
+// MergeContext merge the contexts
+func MergeContext(a, b context.Context) context.Context {
+	mergeCtx, mergeCancel := context.WithCancel(a)
+
+	go func() {
+		select {
+		case <-mergeCtx.Done(): // avoid goroutine leak
+		case <-b.Done():
+			mergeCancel()
+		}
+	}()
+
+	return mergeCtx
+}

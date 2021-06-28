@@ -6,6 +6,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestSubscriber(t *testing.T) {
@@ -267,4 +268,31 @@ func TestSubscriber_Multiple_Fetch(t *testing.T) {
 
 	cancel()
 	wg.Wait()
+}
+
+func TestMergeContext(t *testing.T) {
+	t.Run("both-background", func(t *testing.T) {
+		a := context.Background()
+		b := context.Background()
+		result := MergeContext(a, b)
+		assert.Equal(t, nil, result.Err())
+	})
+
+	t.Run("a-cancelled", func(t *testing.T) {
+		a, cancel := context.WithCancel(context.Background())
+		cancel()
+		b := context.Background()
+		result := MergeContext(a, b)
+		assert.Equal(t, context.Canceled, result.Err())
+	})
+
+	t.Run("b-cancelled", func(t *testing.T) {
+		a := context.Background()
+		b, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		result := MergeContext(a, b)
+		time.Sleep(10 * time.Millisecond)
+		assert.Equal(t, context.Canceled, result.Err())
+	})
 }
