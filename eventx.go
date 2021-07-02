@@ -58,7 +58,7 @@ type Subscriber struct {
 	fetchLimit     uint64
 	fetchSizeLimit uint64
 
-	repo        Repository
+	repo        *sizeLimitedRepo
 	unmarshal   UnmarshalEvent
 	getSequence GetSequence
 
@@ -168,7 +168,7 @@ func (r *Runner) NewSubscriber(from uint64, fetchLimit uint64, options ...Subscr
 		fetchLimit:     fetchLimit,
 		fetchSizeLimit: opts.sizeLimit,
 
-		repo:        r.repo,
+		repo:        newSizeLimitedRepo(r.repo, fetchLimit, opts.sizeLimit),
 		unmarshal:   r.unmarshal,
 		getSequence: r.getSequence,
 
@@ -205,7 +205,7 @@ func (s *Subscriber) Fetch(ctx context.Context) ([]proto.Message, error) {
 		s.receiving = false
 
 		if !resp.existed {
-			events, err := s.repo.GetEventsFrom(ctx, s.from, s.fetchLimit)
+			events, err := s.repo.getEventsFrom(ctx, s.from)
 			if err != nil {
 				return nil, err
 			}
