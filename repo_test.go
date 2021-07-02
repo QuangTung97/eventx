@@ -169,6 +169,45 @@ func TestSizeLimitedRepo_With_Event_Reach_Size_Limit(t *testing.T) {
 	assert.Equal(t, expected, events)
 }
 
+func TestSizeLimitedRepo_With_Single_Event_Reach_Size_Limit(t *testing.T) {
+	t.Parallel()
+
+	repo := &RepositoryMock{}
+
+	r := newSizeLimitedRepo(repo, 10, 200)
+
+	var getFrom uint64
+	var getLimit uint64
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+		getFrom = from
+		getLimit = limit
+		return []Event{
+			{
+				ID:   20,
+				Seq:  20,
+				Data: stringSize(201),
+			},
+		}, nil
+	}
+
+	ctx := context.Background()
+	events, err := r.getEventsFrom(ctx, 20)
+
+	assert.Equal(t, uint64(20), getFrom)
+	assert.Equal(t, uint64(10), getLimit)
+	assert.Equal(t, 1, len(repo.GetEventsFromCalls()))
+
+	assert.Equal(t, nil, err)
+	expected := []Event{
+		{
+			ID:   20,
+			Seq:  20,
+			Data: stringSize(201),
+		},
+	}
+	assert.Equal(t, expected, events)
+}
+
 func TestSizeLimitedRepo_With_Event_Near_Reach_Size_Limit(t *testing.T) {
 	t.Parallel()
 

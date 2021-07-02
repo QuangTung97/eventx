@@ -27,6 +27,10 @@ func (r *sizeLimitedRepo) returnsFromLastEvents() ([]Event, bool) {
 	size := uint64(0)
 	for i, e := range r.lastEvents {
 		size += uint64(len(e.Data))
+		if i == 0 {
+			continue
+		}
+
 		if size == r.sizeLimit {
 			return r.getLastEventsFrom(i + 1), true
 		}
