@@ -3,7 +3,6 @@ package eventx
 import (
 	"context"
 	"github.com/stretchr/testify/assert"
-	"google.golang.org/protobuf/proto"
 	"sync"
 	"testing"
 	"time"
@@ -11,7 +10,7 @@ import (
 
 func TestSubscriber(t *testing.T) {
 	repo := &RepositoryMock{}
-	r := NewRunner(repo, unmarshalEvent, getSequenceTest)
+	r := NewRunner(repo, unmarshalEvent)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -35,7 +34,7 @@ func TestSubscriber(t *testing.T) {
 	sub := r.NewSubscriber(20, 5)
 	events, err := sub.Fetch(ctx)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []proto.Message{
+	assert.Equal(t, []UnmarshalledEvent{
 		unmarshalEvent(Event{ID: 33, Seq: 20}),
 		unmarshalEvent(Event{ID: 32, Seq: 21}),
 	}, events)
@@ -46,7 +45,7 @@ func TestSubscriber(t *testing.T) {
 
 func TestSubscriber_WithSizeLimit(t *testing.T) {
 	repo := &RepositoryMock{}
-	r := NewRunner(repo, unmarshalEvent, getSequenceTest)
+	r := NewRunner(repo, unmarshalEvent)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -70,7 +69,7 @@ func TestSubscriber_WithSizeLimit(t *testing.T) {
 	sub := r.NewSubscriber(18, 5, WithSubscriberSizeLimit(32))
 	events, err := sub.Fetch(ctx)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []proto.Message{
+	assert.Equal(t, []UnmarshalledEvent{
 		unmarshalEvent(Event{ID: 30, Seq: 18}),
 		unmarshalEvent(Event{ID: 28, Seq: 19}),
 	}, events)
@@ -81,7 +80,7 @@ func TestSubscriber_WithSizeLimit(t *testing.T) {
 
 func TestSubscriber_Context_Cancelled_Continue(t *testing.T) {
 	repo := &RepositoryMock{}
-	r := NewRunner(repo, unmarshalEvent, getSequenceTest)
+	r := NewRunner(repo, unmarshalEvent)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -109,18 +108,18 @@ func TestSubscriber_Context_Cancelled_Continue(t *testing.T) {
 
 	events, err := sub.Fetch(fetchCtx)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []proto.Message(nil), events)
+	assert.Equal(t, []UnmarshalledEvent(nil), events)
 
 	events, err = sub.Fetch(ctx)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []proto.Message{
+	assert.Equal(t, []UnmarshalledEvent{
 		testEvent{id: 30, seq: 18},
 		testEvent{id: 28, seq: 19},
 	}, events)
 
 	events, err = sub.Fetch(ctx)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []proto.Message{
+	assert.Equal(t, []UnmarshalledEvent{
 		testEvent{id: 33, seq: 20},
 		testEvent{id: 32, seq: 21},
 	}, events)
@@ -133,7 +132,7 @@ func TestSubscriber_Context_Cancelled_Continue(t *testing.T) {
 
 func TestSubscriber_Not_Existed(t *testing.T) {
 	repo := &RepositoryMock{}
-	r := NewRunner(repo, unmarshalEvent, getSequenceTest)
+	r := NewRunner(repo, unmarshalEvent)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -165,7 +164,7 @@ func TestSubscriber_Not_Existed(t *testing.T) {
 	sub := r.NewSubscriber(17, 5)
 	events, err := sub.Fetch(ctx)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []proto.Message{
+	assert.Equal(t, []UnmarshalledEvent{
 		unmarshalEvent(Event{ID: 10, Seq: 17}),
 		unmarshalEvent(Event{ID: 12, Seq: 18}),
 		unmarshalEvent(Event{ID: 11, Seq: 19}),
@@ -177,7 +176,7 @@ func TestSubscriber_Not_Existed(t *testing.T) {
 
 func TestSubscriber_Fetch_In_Mem_After_Access_DB(t *testing.T) {
 	repo := &RepositoryMock{}
-	r := NewRunner(repo, unmarshalEvent, getSequenceTest)
+	r := NewRunner(repo, unmarshalEvent)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -209,7 +208,7 @@ func TestSubscriber_Fetch_In_Mem_After_Access_DB(t *testing.T) {
 	sub := r.NewSubscriber(17, 5)
 	events, err := sub.Fetch(ctx)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []proto.Message{
+	assert.Equal(t, []UnmarshalledEvent{
 		unmarshalEvent(Event{ID: 10, Seq: 17}),
 		unmarshalEvent(Event{ID: 30, Seq: 18}),
 		unmarshalEvent(Event{ID: 28, Seq: 19}),
@@ -217,7 +216,7 @@ func TestSubscriber_Fetch_In_Mem_After_Access_DB(t *testing.T) {
 
 	events, err = sub.Fetch(ctx)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []proto.Message{
+	assert.Equal(t, []UnmarshalledEvent{
 		unmarshalEvent(Event{ID: 33, Seq: 20}),
 		unmarshalEvent(Event{ID: 32, Seq: 21}),
 	}, events)
@@ -228,7 +227,7 @@ func TestSubscriber_Fetch_In_Mem_After_Access_DB(t *testing.T) {
 
 func TestSubscriber_Multiple_Fetch(t *testing.T) {
 	repo := &RepositoryMock{}
-	r := NewRunner(repo, unmarshalEvent, getSequenceTest)
+	r := NewRunner(repo, unmarshalEvent)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -253,7 +252,7 @@ func TestSubscriber_Multiple_Fetch(t *testing.T) {
 	sub := r.NewSubscriber(18, 3)
 	events, err := sub.Fetch(ctx)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []proto.Message{
+	assert.Equal(t, []UnmarshalledEvent{
 		unmarshalEvent(Event{ID: 30, Seq: 18}),
 		unmarshalEvent(Event{ID: 28, Seq: 19}),
 		unmarshalEvent(Event{ID: 33, Seq: 20}),
@@ -261,7 +260,7 @@ func TestSubscriber_Multiple_Fetch(t *testing.T) {
 
 	events, err = sub.Fetch(ctx)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []proto.Message{
+	assert.Equal(t, []UnmarshalledEvent{
 		unmarshalEvent(Event{ID: 32, Seq: 21}),
 		unmarshalEvent(Event{ID: 40, Seq: 22}),
 	}, events)

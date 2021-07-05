@@ -2,24 +2,23 @@ package eventx
 
 import (
 	"context"
-	"google.golang.org/protobuf/proto"
 )
 
 type fetchRequest struct {
 	from        uint64
 	limit       uint64
 	sizeLimit   uint64
-	placeholder []proto.Message
+	placeholder []UnmarshalledEvent
 	respChan    chan<- fetchResponse
 }
 
 type fetchResponse struct {
 	existed bool
-	events  []proto.Message
+	events  []UnmarshalledEvent
 }
 
 type storedEvent struct {
-	event proto.Message
+	event UnmarshalledEvent
 	size  uint64
 }
 

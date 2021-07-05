@@ -3,7 +3,6 @@ package eventx
 import (
 	"context"
 	"go.uber.org/zap"
-	"google.golang.org/protobuf/proto"
 	"sync"
 	"time"
 )
@@ -17,11 +16,14 @@ type Event struct {
 	CreatedAt time.Time
 }
 
-// GetSequence is callback function for get sequence from unmarshalled event
-type GetSequence func(event proto.Message) uint64
+// UnmarshalledEvent is the output of UnmarshalEvent
+type UnmarshalledEvent interface {
+	// GetSequence is function for get sequence from UnmarshalledEvent
+	GetSequence() uint64
+}
 
-// UnmarshalEvent is callback function for unmarshal binary to proto.Message
-type UnmarshalEvent func(e Event) proto.Message
+// UnmarshalEvent is callback function for unmarshal binary to UnmarshalledEvent
+type UnmarshalEvent func(e Event) UnmarshalledEvent
 
 //go:generate moq -out eventx_mocks_test.go . Repository Timer
 
@@ -43,10 +45,9 @@ type Timer interface {
 
 // Runner for running event handling
 type Runner struct {
-	repo        Repository
-	unmarshal   UnmarshalEvent
-	getSequence GetSequence
-	options     eventxOptions
+	repo      Repository
+	unmarshal UnmarshalEvent
+	options   eventxOptions
 
 	processor *dbProcessor
 	core      *coreService
@@ -58,28 +59,26 @@ type Subscriber struct {
 	fetchLimit     uint64
 	fetchSizeLimit uint64
 
-	repo        *sizeLimitedRepo
-	unmarshal   UnmarshalEvent
-	getSequence GetSequence
+	repo      *sizeLimitedRepo
+	unmarshal UnmarshalEvent
 
 	core        *coreService
 	respChan    chan fetchResponse
-	placeholder []proto.Message
+	placeholder []UnmarshalledEvent
 	receiving   bool
 }
 
 // NewRunner creates a Runner
-func NewRunner(repo Repository, unmarshal UnmarshalEvent, getSequence GetSequence, options ...Option) *Runner {
+func NewRunner(repo Repository, unmarshal UnmarshalEvent, options ...Option) *Runner {
 	opts := computeOptions(options...)
 	coreChan := make(chan coreEvents, 256)
 	processor := newDBProcessor(repo, coreChan, opts)
 	core := newCoreService(coreChan, unmarshal, opts)
 
 	return &Runner{
-		repo:        repo,
-		unmarshal:   unmarshal,
-		getSequence: getSequence,
-		options:     opts,
+		repo:      repo,
+		unmarshal: unmarshal,
+		options:   opts,
 
 		processor: processor,
 		core:      core,
@@ -168,18 +167,17 @@ func (r *Runner) NewSubscriber(from uint64, fetchLimit uint64, options ...Subscr
 		fetchLimit:     fetchLimit,
 		fetchSizeLimit: opts.sizeLimit,
 
-		repo:        newSizeLimitedRepo(r.repo, fetchLimit, opts.sizeLimit),
-		unmarshal:   r.unmarshal,
-		getSequence: r.getSequence,
+		repo:      newSizeLimitedRepo(r.repo, fetchLimit, opts.sizeLimit),
+		unmarshal: r.unmarshal,
 
 		core:        r.core,
 		respChan:    make(chan fetchResponse, 1),
-		placeholder: make([]proto.Message, 0, fetchLimit),
+		placeholder: make([]UnmarshalledEvent, 0, fetchLimit),
 	}
 }
 
-func cloneAndClearEvents(events []proto.Message) []proto.Message {
-	result := make([]proto.Message, len(events))
+func cloneAndClearEvents(events []UnmarshalledEvent) []UnmarshalledEvent {
+	result := make([]UnmarshalledEvent, len(events))
 	copy(result, events)
 	for i := range events {
 		events[i] = nil
@@ -188,7 +186,7 @@ func cloneAndClearEvents(events []proto.Message) []proto.Message {
 }
 
 // Fetch get events
-func (s *Subscriber) Fetch(ctx context.Context) ([]proto.Message, error) {
+func (s *Subscriber) Fetch(ctx context.Context) ([]UnmarshalledEvent, error) {
 	if !s.receiving {
 		s.core.fetch(fetchRequest{
 			from:        s.from,
@@ -213,13 +211,13 @@ func (s *Subscriber) Fetch(ctx context.Context) ([]proto.Message, error) {
 				s.from = events[len(events)-1].Seq + 1
 			}
 
-			unmarshalled := make([]proto.Message, 0, len(events))
+			unmarshalled := make([]UnmarshalledEvent, 0, len(events))
 			for _, e := range events {
 				unmarshalled = append(unmarshalled, s.unmarshal(e))
 			}
 			return unmarshalled, nil
 		}
-		s.from = s.getSequence(resp.events[len(resp.events)-1]) + 1
+		s.from = resp.events[len(resp.events)-1].GetSequence() + 1
 		return cloneAndClearEvents(resp.events), nil
 
 	case <-ctx.Done():
