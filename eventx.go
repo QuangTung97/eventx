@@ -2,10 +2,14 @@ package eventx
 
 import (
 	"context"
+	"errors"
 	"go.uber.org/zap"
 	"sync"
 	"time"
 )
+
+// ErrEventNotFound when select from events table not find any events
+var ErrEventNotFound = errors.New("not found any events from a sequence")
 
 // Event represents events
 // type of *Data* is string instead of []byte for immutability
@@ -207,9 +211,10 @@ func (s *Subscriber) Fetch(ctx context.Context) ([]UnmarshalledEvent, error) {
 			if err != nil {
 				return nil, err
 			}
-			if len(events) > 0 {
-				s.from = events[len(events)-1].Seq + 1
+			if len(events) == 0 {
+				return nil, ErrEventNotFound
 			}
+			s.from = events[len(events)-1].Seq + 1
 
 			unmarshalled := make([]UnmarshalledEvent, 0, len(events))
 			for _, e := range events {
