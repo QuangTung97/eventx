@@ -2,6 +2,7 @@ package eventx
 
 import (
 	"context"
+	"errors"
 	"github.com/stretchr/testify/assert"
 	"sync"
 	"testing"
@@ -220,6 +221,80 @@ func TestSubscriber_Fetch_In_Mem_After_Access_DB(t *testing.T) {
 		unmarshalEvent(Event{ID: 33, Seq: 20}),
 		unmarshalEvent(Event{ID: 32, Seq: 21}),
 	}, events)
+
+	cancel()
+	wg.Wait()
+}
+
+func TestSubscriber_GetEventsFrom_Returns_Error(t *testing.T) {
+	repo := &RepositoryMock{}
+	r := NewRunner(repo, unmarshalEvent)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]Event, error) {
+		return []Event{
+			{ID: 30, Seq: 18},
+			{ID: 28, Seq: 19},
+			{ID: 33, Seq: 20},
+			{ID: 32, Seq: 21},
+		}, nil
+	}
+
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+		return nil, errors.New("get-events-error")
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		r.Run(ctx)
+	}()
+
+	sub := r.NewSubscriber(17, 5)
+	events, err := sub.Fetch(ctx)
+	assert.Equal(t, errors.New("get-events-error"), err)
+	assert.Equal(t, []UnmarshalledEvent(nil), events)
+	assert.Equal(t, uint64(17), sub.from)
+
+	cancel()
+	wg.Wait()
+}
+
+func TestSubscriber_GetEventsFrom_Returns_Empty(t *testing.T) {
+	repo := &RepositoryMock{}
+	r := NewRunner(repo, unmarshalEvent)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]Event, error) {
+		return []Event{
+			{ID: 30, Seq: 18},
+			{ID: 28, Seq: 19},
+			{ID: 33, Seq: 20},
+			{ID: 32, Seq: 21},
+		}, nil
+	}
+
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+		return nil, nil
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		r.Run(ctx)
+	}()
+
+	sub := r.NewSubscriber(17, 5)
+	events, err := sub.Fetch(ctx)
+	assert.Equal(t, ErrEventNotFound, err)
+	assert.Equal(t, []UnmarshalledEvent(nil), events)
+	assert.Equal(t, uint64(17), sub.from)
 
 	cancel()
 	wg.Wait()
