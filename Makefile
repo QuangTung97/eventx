@@ -1,16 +1,13 @@
 .PHONY: install-tools lint test
 
 install-tools:
-	go install golang.org/x/lint/golint
-	go install github.com/kisielk/errcheck
-	go install github.com/fzipp/gocyclo/cmd/gocyclo
+	go install github.com/matryer/moq
+	go install github.com/mgechev/revive
 
 lint:
 	go fmt ./...
-	golint ./...
 	go vet ./...
-	errcheck ./...
-	gocyclo -over 10 .
+	revive -config revive.toml -formatter friendly ./...
 
 test:
 	go test -v ./...

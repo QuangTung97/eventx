@@ -96,6 +96,7 @@ func sleepContext(ctx context.Context, d time.Duration) {
 	}
 }
 
+//revive:disable:cognitive-complexity
 func (r *Runner) runDBProcessor(ctx context.Context) {
 OuterLoop:
 	for {
@@ -128,6 +129,8 @@ OuterLoop:
 		}
 	}
 }
+
+//revive:enable:cognitive-complexity
 
 func (r *Runner) runCoreService(ctx context.Context) {
 	for {

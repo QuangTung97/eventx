@@ -3,7 +3,6 @@
 package tools
 
 import (
-	_ "github.com/fzipp/gocyclo/cmd/gocyclo"
-	_ "github.com/kisielk/errcheck"
-	_ "golang.org/x/lint/golint"
+	_ "github.com/matryer/moq"
+	_ "github.com/mgechev/revive"
 )

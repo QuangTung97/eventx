@@ -191,7 +191,11 @@ func TestCoreServiceFetch_Limit_Exceed(t *testing.T) {
 }
 
 func stringSize(n int) string {
-	return string(make([]byte, n))
+	data := make([]byte, n)
+	for i := range data {
+		data[i] = 'A'
+	}
+	return string(data)
 }
 
 func TestCoreServiceFetch_SizeLimit_Exceed(t *testing.T) {

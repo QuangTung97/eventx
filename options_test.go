@@ -50,7 +50,6 @@ func TestComputeCoreOptions(t *testing.T) {
 			opts: computeOptions(WithCoreStoredEventsSize(2000)),
 			expected: func(opts *eventxOptions) {
 				opts.coreStoredEventsSize = 2000
-
 			},
 		},
 		{

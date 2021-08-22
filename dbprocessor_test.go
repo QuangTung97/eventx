@@ -168,6 +168,7 @@ func TestDBProcessor_Signal_GetUnprocessedEvents_Empty(t *testing.T) {
 	assert.Equal(t, 0, len(repo.UpdateSequencesCalls()))
 }
 
+//revive:disable-next-line:get-return
 func getUnprocessedWithEvents(repo *RepositoryMock, events []Event) {
 	repo.GetUnprocessedEventsFunc = func(ctx context.Context, limit uint64) ([]Event, error) {
 		return events, nil

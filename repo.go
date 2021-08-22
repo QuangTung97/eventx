@@ -17,51 +17,82 @@ func newSizeLimitedRepo(repo Repository, limit uint64, sizeLimit uint64) *sizeLi
 	}
 }
 
-func (r *sizeLimitedRepo) getLastEventsFrom(index int) []Event {
+func (r *sizeLimitedRepo) splitLastEvents(index int) []Event {
 	result := r.lastEvents[:index]
 	r.lastEvents = r.lastEvents[index:]
 	return result
 }
 
-func (r *sizeLimitedRepo) returnsFromLastEvents() ([]Event, bool) {
-	size := uint64(0)
-	for i, e := range r.lastEvents {
-		size += uint64(len(e.Data))
-		if i == 0 {
-			continue
-		}
-
-		if size == r.sizeLimit {
-			return r.getLastEventsFrom(i + 1), true
-		}
-		if size > r.sizeLimit {
-			return r.getLastEventsFrom(i), true
-		}
-	}
-	return nil, false
-}
-
 func (r *sizeLimitedRepo) getEventsFrom(ctx context.Context, from uint64) ([]Event, error) {
-	events, ok := r.returnsFromLastEvents()
+	events, dbFrom, ok := r.getFromMem(from)
 	if ok {
 		return events, nil
 	}
 
-	if len(r.lastEvents) > 0 {
-		from = r.lastEvents[len(r.lastEvents)-1].Seq + 1
-	}
-
-	dbEvents, err := r.repo.GetEventsFrom(ctx, from, r.limit)
+	dbEvents, err := r.repo.GetEventsFrom(ctx, dbFrom, r.limit)
 	if err != nil {
 		return nil, err
 	}
 
-	r.lastEvents = append(r.lastEvents, dbEvents...)
+	r.setDBResult(dbEvents)
 
-	events, ok = r.returnsFromLastEvents()
-	if ok {
-		return events, nil
+	return r.forceGetFromMem(), nil
+}
+
+func (r *sizeLimitedRepo) tryToGetFromMem() ([]Event, bool) {
+	size := uint64(0)
+	for i, event := range r.lastEvents {
+		if uint64(i) >= r.limit {
+			return r.splitLastEvents(i), true
+		}
+
+		size += uint64(len(event.Data))
+
+		if size == r.sizeLimit {
+			return r.splitLastEvents(i + 1), true
+		}
+		if size > r.sizeLimit {
+			if i > 0 {
+				return r.splitLastEvents(i), true
+			}
+			return r.splitLastEvents(i + 1), true
+		}
 	}
 
-	return r.getLastEventsFrom(len(r.lastEvents)), nil
+	return nil, false
+}
+
+func (r *sizeLimitedRepo) getFromMem(from uint64) ([]Event, uint64, bool) {
+	if len(r.lastEvents) == 0 {
+		return nil, from, false
+	}
+
+	firstSeq := r.lastEvents[0].Seq
+	if firstSeq != from {
+		r.lastEvents = nil
+		return nil, from, false
+	}
+
+	events, ok := r.tryToGetFromMem()
+	if ok {
+		return events, 0, true
+	}
+
+	lastSeq := r.lastEvents[len(r.lastEvents)-1].Seq
+	return nil, lastSeq + 1, false
+}
+
+func (r *sizeLimitedRepo) setDBResult(events []Event) {
+	r.lastEvents = append(r.lastEvents, events...)
+}
+
+func (r *sizeLimitedRepo) forceGetFromMem() []Event {
+	events, ok := r.tryToGetFromMem()
+	if ok {
+		return events
+	}
+
+	events = r.lastEvents
+	r.lastEvents = nil
+	return events
 }
