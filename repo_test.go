@@ -10,13 +10,13 @@ import (
 func TestSizeLimitedRepo_WithError(t *testing.T) {
 	t.Parallel()
 
-	repo := &RepositoryMock{}
+	repo := &RepositoryMock[testEvent]{}
 
-	r := newSizeLimitedRepo(repo, 10, 200)
+	r := newSizeLimitedRepo[testEvent](repo, 10, 200)
 
 	var getFrom uint64
 	var getLimit uint64
-	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]testEvent, error) {
 		getFrom = from
 		getLimit = limit
 		return nil, errors.New("get-events-error")
@@ -30,16 +30,16 @@ func TestSizeLimitedRepo_WithError(t *testing.T) {
 	assert.Equal(t, 1, len(repo.GetEventsFromCalls()))
 
 	assert.Equal(t, errors.New("get-events-error"), err)
-	var expected []Event
+	var expected []testEvent
 	assert.Equal(t, expected, events)
 }
 
 func TestSizeLimitedRepo_With_Not_Reach_Size_Limit(t *testing.T) {
 	t.Parallel()
 
-	repo := &RepositoryMock{}
+	repo := &RepositoryMock[testEvent]{}
 
-	r := newSizeLimitedRepo(repo, 10, 201)
+	r := newSizeLimitedRepo[testEvent](repo, 10, 201)
 
 	ctx := context.Background()
 
@@ -47,19 +47,19 @@ func TestSizeLimitedRepo_With_Not_Reach_Size_Limit(t *testing.T) {
 	var getLimit uint64
 
 	// FIRST CALL
-	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]testEvent, error) {
 		getFrom = from
 		getLimit = limit
-		return []Event{
+		return []testEvent{
 			{
-				ID:   20,
-				Seq:  20,
-				Data: stringSize(100),
+				id:   20,
+				seq:  20,
+				size: 100,
 			},
 			{
-				ID:   21,
-				Seq:  21,
-				Data: stringSize(101),
+				id:   21,
+				seq:  21,
+				size: 101,
 			},
 		}, nil
 	}
@@ -71,34 +71,34 @@ func TestSizeLimitedRepo_With_Not_Reach_Size_Limit(t *testing.T) {
 	assert.Equal(t, 1, len(repo.GetEventsFromCalls()))
 
 	assert.Equal(t, nil, err)
-	expected := []Event{
+	expected := []testEvent{
 		{
-			ID:   20,
-			Seq:  20,
-			Data: stringSize(100),
+			id:   20,
+			seq:  20,
+			size: 100,
 		},
 		{
-			ID:   21,
-			Seq:  21,
-			Data: stringSize(101),
+			id:   21,
+			seq:  21,
+			size: 101,
 		},
 	}
 	assert.Equal(t, expected, events)
 
 	// SECOND CALL
-	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]testEvent, error) {
 		getFrom = from
 		getLimit = limit
-		return []Event{
+		return []testEvent{
 			{
-				ID:   22,
-				Seq:  22,
-				Data: stringSize(100),
+				id:   22,
+				seq:  22,
+				size: 100,
 			},
 			{
-				ID:   23,
-				Seq:  23,
-				Data: stringSize(101),
+				id:   23,
+				seq:  23,
+				size: 101,
 			},
 		}, nil
 	}
@@ -110,16 +110,16 @@ func TestSizeLimitedRepo_With_Not_Reach_Size_Limit(t *testing.T) {
 	assert.Equal(t, 2, len(repo.GetEventsFromCalls()))
 
 	assert.Equal(t, nil, err)
-	expected = []Event{
+	expected = []testEvent{
 		{
-			ID:   22,
-			Seq:  22,
-			Data: stringSize(100),
+			id:   22,
+			seq:  22,
+			size: 100,
 		},
 		{
-			ID:   23,
-			Seq:  23,
-			Data: stringSize(101),
+			id:   23,
+			seq:  23,
+			size: 101,
 		},
 	}
 	assert.Equal(t, expected, events)
@@ -128,25 +128,25 @@ func TestSizeLimitedRepo_With_Not_Reach_Size_Limit(t *testing.T) {
 func TestSizeLimitedRepo_With_Event_Reach_Size_Limit(t *testing.T) {
 	t.Parallel()
 
-	repo := &RepositoryMock{}
+	repo := &RepositoryMock[testEvent]{}
 
-	r := newSizeLimitedRepo(repo, 10, 200)
+	r := newSizeLimitedRepo[testEvent](repo, 10, 200)
 
 	var getFrom uint64
 	var getLimit uint64
-	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]testEvent, error) {
 		getFrom = from
 		getLimit = limit
-		return []Event{
+		return []testEvent{
 			{
-				ID:   20,
-				Seq:  20,
-				Data: stringSize(100),
+				id:   20,
+				seq:  20,
+				size: 100,
 			},
 			{
-				ID:   21,
-				Seq:  21,
-				Data: stringSize(101),
+				id:   21,
+				seq:  21,
+				size: 101,
 			},
 		}, nil
 	}
@@ -159,11 +159,11 @@ func TestSizeLimitedRepo_With_Event_Reach_Size_Limit(t *testing.T) {
 	assert.Equal(t, 1, len(repo.GetEventsFromCalls()))
 
 	assert.Equal(t, nil, err)
-	expected := []Event{
+	expected := []testEvent{
 		{
-			ID:   20,
-			Seq:  20,
-			Data: stringSize(100),
+			id:   20,
+			seq:  20,
+			size: 100,
 		},
 	}
 	assert.Equal(t, expected, events)
@@ -172,20 +172,20 @@ func TestSizeLimitedRepo_With_Event_Reach_Size_Limit(t *testing.T) {
 func TestSizeLimitedRepo_With_Single_Event_Reach_Size_Limit(t *testing.T) {
 	t.Parallel()
 
-	repo := &RepositoryMock{}
+	repo := &RepositoryMock[testEvent]{}
 
-	r := newSizeLimitedRepo(repo, 10, 200)
+	r := newSizeLimitedRepo[testEvent](repo, 10, 200)
 
 	var getFrom uint64
 	var getLimit uint64
-	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]testEvent, error) {
 		getFrom = from
 		getLimit = limit
-		return []Event{
+		return []testEvent{
 			{
-				ID:   20,
-				Seq:  20,
-				Data: stringSize(201),
+				id:   20,
+				seq:  20,
+				size: 201,
 			},
 		}, nil
 	}
@@ -198,11 +198,11 @@ func TestSizeLimitedRepo_With_Single_Event_Reach_Size_Limit(t *testing.T) {
 	assert.Equal(t, 1, len(repo.GetEventsFromCalls()))
 
 	assert.Equal(t, nil, err)
-	expected := []Event{
+	expected := []testEvent{
 		{
-			ID:   20,
-			Seq:  20,
-			Data: stringSize(201),
+			id:   20,
+			seq:  20,
+			size: 201,
 		},
 	}
 	assert.Equal(t, expected, events)
@@ -211,25 +211,25 @@ func TestSizeLimitedRepo_With_Single_Event_Reach_Size_Limit(t *testing.T) {
 func TestSizeLimitedRepo_With_Event_Near_Reach_Size_Limit(t *testing.T) {
 	t.Parallel()
 
-	repo := &RepositoryMock{}
+	repo := &RepositoryMock[testEvent]{}
 
-	r := newSizeLimitedRepo(repo, 10, 201)
+	r := newSizeLimitedRepo[testEvent](repo, 10, 201)
 
 	var getFrom uint64
 	var getLimit uint64
-	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]testEvent, error) {
 		getFrom = from
 		getLimit = limit
-		return []Event{
+		return []testEvent{
 			{
-				ID:   20,
-				Seq:  20,
-				Data: stringSize(100),
+				id:   20,
+				seq:  20,
+				size: 100,
 			},
 			{
-				ID:   21,
-				Seq:  21,
-				Data: stringSize(101),
+				id:   21,
+				seq:  21,
+				size: 101,
 			},
 		}, nil
 	}
@@ -242,16 +242,16 @@ func TestSizeLimitedRepo_With_Event_Near_Reach_Size_Limit(t *testing.T) {
 	assert.Equal(t, 1, len(repo.GetEventsFromCalls()))
 
 	assert.Equal(t, nil, err)
-	expected := []Event{
+	expected := []testEvent{
 		{
-			ID:   20,
-			Seq:  20,
-			Data: stringSize(100),
+			id:   20,
+			seq:  20,
+			size: 100,
 		},
 		{
-			ID:   21,
-			Seq:  21,
-			Data: stringSize(101),
+			id:   21,
+			seq:  21,
+			size: 101,
 		},
 	}
 	assert.Equal(t, expected, events)
@@ -260,25 +260,25 @@ func TestSizeLimitedRepo_With_Event_Near_Reach_Size_Limit(t *testing.T) {
 func TestSizeLimitedRepo_With_Event_Reach_Size_Limit_Second_Calls(t *testing.T) {
 	t.Parallel()
 
-	repo := &RepositoryMock{}
+	repo := &RepositoryMock[testEvent]{}
 
-	r := newSizeLimitedRepo(repo, 10, 200)
+	r := newSizeLimitedRepo[testEvent](repo, 10, 200)
 
 	var getFrom uint64
 	var getLimit uint64
-	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]testEvent, error) {
 		getFrom = from
 		getLimit = limit
-		return []Event{
+		return []testEvent{
 			{
-				ID:   20,
-				Seq:  20,
-				Data: stringSize(100),
+				id:   20,
+				seq:  20,
+				size: 100,
 			},
 			{
-				ID:   21,
-				Seq:  21,
-				Data: stringSize(101),
+				id:   21,
+				seq:  21,
+				size: 101,
 			},
 		}, nil
 	}
@@ -288,29 +288,29 @@ func TestSizeLimitedRepo_With_Event_Reach_Size_Limit_Second_Calls(t *testing.T) 
 	// FIRST CALL
 	events, err := r.getEventsFrom(ctx, 20)
 	assert.Equal(t, nil, err)
-	expected := []Event{
+	expected := []testEvent{
 		{
-			ID:   20,
-			Seq:  20,
-			Data: stringSize(100),
+			id:   20,
+			seq:  20,
+			size: 100,
 		},
 	}
 	assert.Equal(t, expected, events)
 
 	// SECOND CALL
-	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]testEvent, error) {
 		getFrom = from
 		getLimit = limit
-		return []Event{
+		return []testEvent{
 			{
-				ID:   22,
-				Seq:  22,
-				Data: stringSize(50),
+				id:   22,
+				seq:  22,
+				size: 50,
 			},
 			{
-				ID:   23,
-				Seq:  23,
-				Data: stringSize(50),
+				id:   23,
+				seq:  23,
+				size: 50,
 			},
 		}, nil
 	}
@@ -322,16 +322,16 @@ func TestSizeLimitedRepo_With_Event_Reach_Size_Limit_Second_Calls(t *testing.T) 
 	assert.Equal(t, 2, len(repo.GetEventsFromCalls()))
 
 	assert.Equal(t, nil, err)
-	expected = []Event{
+	expected = []testEvent{
 		{
-			ID:   21,
-			Seq:  21,
-			Data: stringSize(101),
+			id:   21,
+			seq:  21,
+			size: 101,
 		},
 		{
-			ID:   22,
-			Seq:  22,
-			Data: stringSize(50),
+			id:   22,
+			seq:  22,
+			size: 50,
 		},
 	}
 	assert.Equal(t, expected, events)
@@ -340,36 +340,36 @@ func TestSizeLimitedRepo_With_Event_Reach_Size_Limit_Second_Calls(t *testing.T) 
 func TestSizeLimitedRepo_With_Event_Reach_Size_Limit_Second_Calls_Still_Suffice_In_Memory_Size_Fitted(t *testing.T) {
 	t.Parallel()
 
-	repo := &RepositoryMock{}
+	repo := &RepositoryMock[testEvent]{}
 
-	r := newSizeLimitedRepo(repo, 10, 200)
+	r := newSizeLimitedRepo[testEvent](repo, 10, 200)
 
-	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
-		return []Event{
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]testEvent, error) {
+		return []testEvent{
 			{
-				ID:   20,
-				Seq:  20,
-				Data: stringSize(100),
+				id:   20,
+				seq:  20,
+				size: 100,
 			},
 			{
-				ID:   21,
-				Seq:  21,
-				Data: stringSize(60),
+				id:   21,
+				seq:  21,
+				size: 60,
 			},
 			{
-				ID:   22,
-				Seq:  22,
-				Data: stringSize(41),
+				id:   22,
+				seq:  22,
+				size: 41,
 			},
 			{
-				ID:   23,
-				Seq:  23,
-				Data: stringSize(89),
+				id:   23,
+				seq:  23,
+				size: 89,
 			},
 			{
-				ID:   24,
-				Seq:  24,
-				Data: stringSize(70),
+				id:   24,
+				seq:  24,
+				size: 70,
 			},
 		}, nil
 	}
@@ -380,16 +380,16 @@ func TestSizeLimitedRepo_With_Event_Reach_Size_Limit_Second_Calls_Still_Suffice_
 	events, err := r.getEventsFrom(ctx, 20)
 	assert.Equal(t, 1, len(repo.GetEventsFromCalls()))
 	assert.Equal(t, nil, err)
-	expected := []Event{
+	expected := []testEvent{
 		{
-			ID:   20,
-			Seq:  20,
-			Data: stringSize(100),
+			id:   20,
+			seq:  20,
+			size: 100,
 		},
 		{
-			ID:   21,
-			Seq:  21,
-			Data: stringSize(60),
+			id:   21,
+			seq:  21,
+			size: 60,
 		},
 	}
 	assert.Equal(t, expected, events)
@@ -398,21 +398,21 @@ func TestSizeLimitedRepo_With_Event_Reach_Size_Limit_Second_Calls_Still_Suffice_
 	events, err = r.getEventsFrom(ctx, 22)
 	assert.Equal(t, 1, len(repo.GetEventsFromCalls()))
 	assert.Equal(t, nil, err)
-	expected = []Event{
+	expected = []testEvent{
 		{
-			ID:   22,
-			Seq:  22,
-			Data: stringSize(41),
+			id:   22,
+			seq:  22,
+			size: 41,
 		},
 		{
-			ID:   23,
-			Seq:  23,
-			Data: stringSize(89),
+			id:   23,
+			seq:  23,
+			size: 89,
 		},
 		{
-			ID:   24,
-			Seq:  24,
-			Data: stringSize(70),
+			id:   24,
+			seq:  24,
+			size: 70,
 		},
 	}
 	assert.Equal(t, expected, events)
@@ -421,36 +421,36 @@ func TestSizeLimitedRepo_With_Event_Reach_Size_Limit_Second_Calls_Still_Suffice_
 func TestSizeLimitedRepo_With_Event_Reach_Size_Limit_Second_Calls_Still_Suffice_In_Memory_Size_Greater(t *testing.T) {
 	t.Parallel()
 
-	repo := &RepositoryMock{}
+	repo := &RepositoryMock[testEvent]{}
 
-	r := newSizeLimitedRepo(repo, 10, 200)
+	r := newSizeLimitedRepo[testEvent](repo, 10, 200)
 
-	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
-		return []Event{
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]testEvent, error) {
+		return []testEvent{
 			{
-				ID:   20,
-				Seq:  20,
-				Data: stringSize(100),
+				id:   20,
+				seq:  20,
+				size: 100,
 			},
 			{
-				ID:   21,
-				Seq:  21,
-				Data: stringSize(60),
+				id:   21,
+				seq:  21,
+				size: 60,
 			},
 			{
-				ID:   22,
-				Seq:  22,
-				Data: stringSize(41),
+				id:   22,
+				seq:  22,
+				size: 41,
 			},
 			{
-				ID:   23,
-				Seq:  23,
-				Data: stringSize(89),
+				id:   23,
+				seq:  23,
+				size: 89,
 			},
 			{
-				ID:   24,
-				Seq:  24,
-				Data: stringSize(71),
+				id:   24,
+				seq:  24,
+				size: 71,
 			},
 		}, nil
 	}
@@ -461,16 +461,16 @@ func TestSizeLimitedRepo_With_Event_Reach_Size_Limit_Second_Calls_Still_Suffice_
 	events, err := r.getEventsFrom(ctx, 20)
 	assert.Equal(t, 1, len(repo.GetEventsFromCalls()))
 	assert.Equal(t, nil, err)
-	expected := []Event{
+	expected := []testEvent{
 		{
-			ID:   20,
-			Seq:  20,
-			Data: stringSize(100),
+			id:   20,
+			seq:  20,
+			size: 100,
 		},
 		{
-			ID:   21,
-			Seq:  21,
-			Data: stringSize(60),
+			id:   21,
+			seq:  21,
+			size: 60,
 		},
 	}
 	assert.Equal(t, expected, events)
@@ -479,16 +479,16 @@ func TestSizeLimitedRepo_With_Event_Reach_Size_Limit_Second_Calls_Still_Suffice_
 	events, err = r.getEventsFrom(ctx, 22)
 	assert.Equal(t, 1, len(repo.GetEventsFromCalls()))
 	assert.Equal(t, nil, err)
-	expected = []Event{
+	expected = []testEvent{
 		{
-			ID:   22,
-			Seq:  22,
-			Data: stringSize(41),
+			id:   22,
+			seq:  22,
+			size: 41,
 		},
 		{
-			ID:   23,
-			Seq:  23,
-			Data: stringSize(89),
+			id:   23,
+			seq:  23,
+			size: 89,
 		},
 	}
 	assert.Equal(t, expected, events)
@@ -497,38 +497,38 @@ func TestSizeLimitedRepo_With_Event_Reach_Size_Limit_Second_Calls_Still_Suffice_
 func TestSizeLimitedRepo_With_Third_Calls(t *testing.T) {
 	t.Parallel()
 
-	repo := &RepositoryMock{}
+	repo := &RepositoryMock[testEvent]{}
 
-	r := newSizeLimitedRepo(repo, 10, 200)
+	r := newSizeLimitedRepo[testEvent](repo, 10, 200)
 
 	var getFrom uint64
-	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]testEvent, error) {
 		getFrom = from
-		return []Event{
+		return []testEvent{
 			{
-				ID:   20,
-				Seq:  20,
-				Data: stringSize(100),
+				id:   20,
+				seq:  20,
+				size: 100,
 			},
 			{
-				ID:   21,
-				Seq:  21,
-				Data: stringSize(60),
+				id:   21,
+				seq:  21,
+				size: 60,
 			},
 			{
-				ID:   22,
-				Seq:  22,
-				Data: stringSize(41),
+				id:   22,
+				seq:  22,
+				size: 41,
 			},
 			{
-				ID:   23,
-				Seq:  23,
-				Data: stringSize(89),
+				id:   23,
+				seq:  23,
+				size: 89,
 			},
 			{
-				ID:   24,
-				Seq:  24,
-				Data: stringSize(71),
+				id:   24,
+				seq:  24,
+				size: 71,
 			},
 		}, nil
 	}
@@ -541,16 +541,16 @@ func TestSizeLimitedRepo_With_Third_Calls(t *testing.T) {
 	assert.Equal(t, 1, len(repo.GetEventsFromCalls()))
 
 	assert.Equal(t, nil, err)
-	expected := []Event{
+	expected := []testEvent{
 		{
-			ID:   20,
-			Seq:  20,
-			Data: stringSize(100),
+			id:   20,
+			seq:  20,
+			size: 100,
 		},
 		{
-			ID:   21,
-			Seq:  21,
-			Data: stringSize(60),
+			id:   21,
+			seq:  21,
+			size: 60,
 		},
 	}
 	assert.Equal(t, expected, events)
@@ -559,28 +559,28 @@ func TestSizeLimitedRepo_With_Third_Calls(t *testing.T) {
 	events, err = r.getEventsFrom(ctx, 22)
 	assert.Equal(t, 1, len(repo.GetEventsFromCalls()))
 	assert.Equal(t, nil, err)
-	expected = []Event{
+	expected = []testEvent{
 		{
-			ID:   22,
-			Seq:  22,
-			Data: stringSize(41),
+			id:   22,
+			seq:  22,
+			size: 41,
 		},
 		{
-			ID:   23,
-			Seq:  23,
-			Data: stringSize(89),
+			id:   23,
+			seq:  23,
+			size: 89,
 		},
 	}
 	assert.Equal(t, expected, events)
 
 	// THIRD CALL
-	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]testEvent, error) {
 		getFrom = from
-		return []Event{
+		return []testEvent{
 			{
-				ID:   25,
-				Seq:  25,
-				Data: stringSize(80),
+				id:   25,
+				seq:  25,
+				size: 80,
 			},
 		}, nil
 	}
@@ -590,16 +590,16 @@ func TestSizeLimitedRepo_With_Third_Calls(t *testing.T) {
 	assert.Equal(t, 2, len(repo.GetEventsFromCalls()))
 
 	assert.Equal(t, nil, err)
-	expected = []Event{
+	expected = []testEvent{
 		{
-			ID:   24,
-			Seq:  24,
-			Data: stringSize(71),
+			id:   24,
+			seq:  24,
+			size: 71,
 		},
 		{
-			ID:   25,
-			Seq:  25,
-			Data: stringSize(80),
+			id:   25,
+			seq:  25,
+			size: 80,
 		},
 	}
 	assert.Equal(t, expected, events)
@@ -608,38 +608,38 @@ func TestSizeLimitedRepo_With_Third_Calls(t *testing.T) {
 func TestSizeLimitedRepo_With_Spacing__Match_Size(t *testing.T) {
 	t.Parallel()
 
-	repo := &RepositoryMock{}
+	repo := &RepositoryMock[testEvent]{}
 
-	r := newSizeLimitedRepo(repo, 10, 200)
+	r := newSizeLimitedRepo[testEvent](repo, 10, 200)
 
 	var getFrom uint64
-	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]testEvent, error) {
 		getFrom = from
-		return []Event{
+		return []testEvent{
 			{
-				ID:   20,
-				Seq:  20,
-				Data: stringSize(100),
+				id:   20,
+				seq:  20,
+				size: 100,
 			},
 			{
-				ID:   21,
-				Seq:  21,
-				Data: stringSize(60),
+				id:   21,
+				seq:  21,
+				size: 60,
 			},
 			{
-				ID:   22,
-				Seq:  22,
-				Data: stringSize(41),
+				id:   22,
+				seq:  22,
+				size: 41,
 			},
 			{
-				ID:   23,
-				Seq:  23,
-				Data: stringSize(89),
+				id:   23,
+				seq:  23,
+				size: 89,
 			},
 			{
-				ID:   24,
-				Seq:  24,
-				Data: stringSize(111),
+				id:   24,
+				seq:  24,
+				size: 111,
 			},
 		}, nil
 	}
@@ -652,32 +652,32 @@ func TestSizeLimitedRepo_With_Spacing__Match_Size(t *testing.T) {
 	assert.Equal(t, 1, len(repo.GetEventsFromCalls()))
 
 	assert.Equal(t, nil, err)
-	expected := []Event{
+	expected := []testEvent{
 		{
-			ID:   20,
-			Seq:  20,
-			Data: stringSize(100),
+			id:   20,
+			seq:  20,
+			size: 100,
 		},
 		{
-			ID:   21,
-			Seq:  21,
-			Data: stringSize(60),
+			id:   21,
+			seq:  21,
+			size: 60,
 		},
 	}
 	assert.Equal(t, expected, events)
 
 	// SECOND CALL
-	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
-		return []Event{
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]testEvent, error) {
+		return []testEvent{
 			{
-				ID:   23,
-				Seq:  23,
-				Data: stringSize(89),
+				id:   23,
+				seq:  23,
+				size: 89,
 			},
 			{
-				ID:   24,
-				Seq:  24,
-				Data: stringSize(111),
+				id:   24,
+				seq:  24,
+				size: 111,
 			},
 		}, nil
 	}
@@ -685,176 +685,176 @@ func TestSizeLimitedRepo_With_Spacing__Match_Size(t *testing.T) {
 	events, err = r.getEventsFrom(ctx, 23)
 	assert.Equal(t, 2, len(repo.GetEventsFromCalls()))
 	assert.Equal(t, nil, err)
-	expected = []Event{
+	expected = []testEvent{
 		{
-			ID:   23,
-			Seq:  23,
-			Data: stringSize(89),
+			id:   23,
+			seq:  23,
+			size: 89,
 		},
 		{
-			ID:   24,
-			Seq:  24,
-			Data: stringSize(111),
+			id:   24,
+			seq:  24,
+			size: 111,
 		},
 	}
 	assert.Equal(t, expected, events)
 }
 
 func TestSizeLimitedRepo_GetFromMem_Empty(t *testing.T) {
-	r := newSizeLimitedRepo(nil, 5, 100)
+	r := newSizeLimitedRepo[testEvent](nil, 5, 100)
 	events, from, ok := r.getFromMem(20)
-	assert.Equal(t, []Event(nil), events)
+	assert.Equal(t, []testEvent(nil), events)
 	assert.Equal(t, uint64(20), from)
 	assert.Equal(t, false, ok)
 }
 
 func TestSizeLimitedRepo_GetFromMem_SingleElement(t *testing.T) {
-	r := newSizeLimitedRepo(nil, 5, 100)
+	r := newSizeLimitedRepo[testEvent](nil, 5, 100)
 
-	r.setDBResult([]Event{
-		{ID: 20, Seq: 20, Data: stringSize(60)},
+	r.setDBResult([]testEvent{
+		{id: 20, seq: 20, size: 60},
 	})
 
 	events, from, ok := r.getFromMem(20)
 
-	assert.Equal(t, []Event(nil), events)
+	assert.Equal(t, []testEvent(nil), events)
 	assert.Equal(t, uint64(21), from)
 	assert.Equal(t, false, ok)
 }
 
 func TestSizeLimitedRepo_Fit_Size_Limit(t *testing.T) {
-	r := newSizeLimitedRepo(nil, 5, 100)
+	r := newSizeLimitedRepo[testEvent](nil, 5, 100)
 
-	r.setDBResult([]Event{
-		{ID: 20, Seq: 20, Data: stringSize(60)},
-		{ID: 21, Seq: 21, Data: stringSize(40)},
+	r.setDBResult([]testEvent{
+		{id: 20, seq: 20, size: 60},
+		{id: 21, seq: 21, size: 40},
 	})
 
 	events, from, ok := r.getFromMem(20)
 
-	assert.Equal(t, []Event{
-		{ID: 20, Seq: 20, Data: stringSize(60)},
-		{ID: 21, Seq: 21, Data: stringSize(40)},
+	assert.Equal(t, []testEvent{
+		{id: 20, seq: 20, size: 60},
+		{id: 21, seq: 21, size: 40},
 	}, events)
 	assert.Equal(t, uint64(0), from)
 	assert.Equal(t, true, ok)
-	assert.Equal(t, []Event{}, r.lastEvents)
+	assert.Equal(t, []testEvent{}, r.lastEvents)
 }
 
 func TestSizeLimitedRepo_Exceed_Size_Limit(t *testing.T) {
-	r := newSizeLimitedRepo(nil, 5, 100)
+	r := newSizeLimitedRepo[testEvent](nil, 5, 100)
 
-	r.setDBResult([]Event{
-		{ID: 20, Seq: 20, Data: stringSize(60)},
-		{ID: 21, Seq: 21, Data: stringSize(20)},
-		{ID: 22, Seq: 22, Data: stringSize(21)},
-		{ID: 23, Seq: 23, Data: stringSize(40)},
+	r.setDBResult([]testEvent{
+		{id: 20, seq: 20, size: 60},
+		{id: 21, seq: 21, size: 20},
+		{id: 22, seq: 22, size: 21},
+		{id: 23, seq: 23, size: 40},
 	})
 
 	events, from, ok := r.getFromMem(20)
 
-	assert.Equal(t, []Event{
-		{ID: 20, Seq: 20, Data: stringSize(60)},
-		{ID: 21, Seq: 21, Data: stringSize(20)},
+	assert.Equal(t, []testEvent{
+		{id: 20, seq: 20, size: 60},
+		{id: 21, seq: 21, size: 20},
 	}, events)
 	assert.Equal(t, uint64(0), from)
 	assert.Equal(t, true, ok)
-	assert.Equal(t, []Event{
-		{ID: 22, Seq: 22, Data: stringSize(21)},
-		{ID: 23, Seq: 23, Data: stringSize(40)},
+	assert.Equal(t, []testEvent{
+		{id: 22, seq: 22, size: 21},
+		{id: 23, seq: 23, size: 40},
 	}, r.lastEvents)
 }
 
 func TestSizeLimitedRepo_GetFromMem_From_Not_Match_First_Element(t *testing.T) {
-	r := newSizeLimitedRepo(nil, 5, 100)
+	r := newSizeLimitedRepo[testEvent](nil, 5, 100)
 
-	r.setDBResult([]Event{
-		{ID: 20, Seq: 20, Data: stringSize(60)},
-		{ID: 21, Seq: 21, Data: stringSize(20)},
-		{ID: 22, Seq: 22, Data: stringSize(21)},
-		{ID: 23, Seq: 23, Data: stringSize(59)},
+	r.setDBResult([]testEvent{
+		{id: 20, seq: 20, size: 60},
+		{id: 21, seq: 21, size: 20},
+		{id: 22, seq: 22, size: 21},
+		{id: 23, seq: 23, size: 59},
 	})
 
 	events, from, ok := r.getFromMem(21)
 
-	assert.Equal(t, []Event(nil), events)
+	assert.Equal(t, []testEvent(nil), events)
 	assert.Equal(t, uint64(21), from)
 	assert.Equal(t, false, ok)
-	assert.Equal(t, []Event(nil), r.lastEvents)
+	assert.Equal(t, []testEvent(nil), r.lastEvents)
 }
 
 func TestSizeLimitedRepo_GetFromMem_Reach_Limit(t *testing.T) {
-	r := newSizeLimitedRepo(nil, 5, 100)
+	r := newSizeLimitedRepo[testEvent](nil, 5, 100)
 
-	r.setDBResult([]Event{
-		{ID: 20, Seq: 20, Data: stringSize(4)},
-		{ID: 21, Seq: 21, Data: stringSize(4)},
-		{ID: 22, Seq: 22, Data: stringSize(4)},
-		{ID: 23, Seq: 23, Data: stringSize(4)},
-		{ID: 24, Seq: 24, Data: stringSize(4)},
-		{ID: 25, Seq: 25, Data: stringSize(4)},
+	r.setDBResult([]testEvent{
+		{id: 20, seq: 20, size: 4},
+		{id: 21, seq: 21, size: 4},
+		{id: 22, seq: 22, size: 4},
+		{id: 23, seq: 23, size: 4},
+		{id: 24, seq: 24, size: 4},
+		{id: 25, seq: 25, size: 4},
 	})
 
 	events, from, ok := r.getFromMem(20)
 	assert.Equal(t, uint64(0), from)
 	assert.Equal(t, true, ok)
 
-	assert.Equal(t, []Event{
-		{ID: 20, Seq: 20, Data: stringSize(4)},
-		{ID: 21, Seq: 21, Data: stringSize(4)},
-		{ID: 22, Seq: 22, Data: stringSize(4)},
-		{ID: 23, Seq: 23, Data: stringSize(4)},
-		{ID: 24, Seq: 24, Data: stringSize(4)},
+	assert.Equal(t, []testEvent{
+		{id: 20, seq: 20, size: 4},
+		{id: 21, seq: 21, size: 4},
+		{id: 22, seq: 22, size: 4},
+		{id: 23, seq: 23, size: 4},
+		{id: 24, seq: 24, size: 4},
 	}, events)
-	assert.Equal(t, []Event{
-		{ID: 25, Seq: 25, Data: stringSize(4)},
+	assert.Equal(t, []testEvent{
+		{id: 25, seq: 25, size: 4},
 	}, r.lastEvents)
 }
 
 func TestSizeLimitedRepo_ForceGetFromMem_NotReachSizeLimit(t *testing.T) {
-	r := newSizeLimitedRepo(nil, 5, 100)
+	r := newSizeLimitedRepo[testEvent](nil, 5, 100)
 
-	r.setDBResult([]Event{
-		{ID: 20, Seq: 20, Data: stringSize(60)},
-		{ID: 21, Seq: 21, Data: stringSize(20)},
+	r.setDBResult([]testEvent{
+		{id: 20, seq: 20, size: 60},
+		{id: 21, seq: 21, size: 20},
 	})
 
 	events := r.forceGetFromMem()
 
-	assert.Equal(t, []Event{
-		{ID: 20, Seq: 20, Data: stringSize(60)},
-		{ID: 21, Seq: 21, Data: stringSize(20)},
+	assert.Equal(t, []testEvent{
+		{id: 20, seq: 20, size: 60},
+		{id: 21, seq: 21, size: 20},
 	}, events)
-	assert.Equal(t, []Event(nil), r.lastEvents)
+	assert.Equal(t, []testEvent(nil), r.lastEvents)
 }
 
 func TestSizeLimitedRepo_ForceGetFromMem_ExceedSizeLimit(t *testing.T) {
-	r := newSizeLimitedRepo(nil, 5, 100)
+	r := newSizeLimitedRepo[testEvent](nil, 5, 100)
 
-	r.setDBResult([]Event{
-		{ID: 20, Seq: 20, Data: stringSize(60)},
-		{ID: 21, Seq: 21, Data: stringSize(20)},
-		{ID: 21, Seq: 21, Data: stringSize(21)},
+	r.setDBResult([]testEvent{
+		{id: 20, seq: 20, size: 60},
+		{id: 21, seq: 21, size: 20},
+		{id: 21, seq: 21, size: 21},
 	})
 
 	events := r.forceGetFromMem()
 
-	assert.Equal(t, []Event{
-		{ID: 20, Seq: 20, Data: stringSize(60)},
-		{ID: 21, Seq: 21, Data: stringSize(20)},
+	assert.Equal(t, []testEvent{
+		{id: 20, seq: 20, size: 60},
+		{id: 21, seq: 21, size: 20},
 	}, events)
 }
 
 func TestSizeLimitedRepo_ForceGetFromMem_Exceed_Size_Limit_At_First_Element(t *testing.T) {
-	r := newSizeLimitedRepo(nil, 5, 100)
+	r := newSizeLimitedRepo[testEvent](nil, 5, 100)
 
-	r.setDBResult([]Event{
-		{ID: 20, Seq: 20, Data: stringSize(101)},
+	r.setDBResult([]testEvent{
+		{id: 20, seq: 20, size: 101},
 	})
 
 	events := r.forceGetFromMem()
 
-	assert.Equal(t, []Event{
-		{ID: 20, Seq: 20, Data: stringSize(101)},
+	assert.Equal(t, []testEvent{
+		{id: 20, seq: 20, size: 101},
 	}, events)
 }

@@ -11,33 +11,21 @@ import (
 // ErrEventNotFound when select from events table not find any events
 var ErrEventNotFound = errors.New("not found any events from a sequence")
 
-// Event represents events
-// type of *Data* is string instead of []byte for immutability
-type Event struct {
-	ID        uint64
-	Seq       uint64
-	Data      string
-	CreatedAt time.Time
-}
-
-// UnmarshalledEvent is the output of UnmarshalEvent
-type UnmarshalledEvent interface {
-	// GetSequence is function for get sequence from UnmarshalledEvent
+// EventConstraint a type constraint for event
+type EventConstraint interface {
 	GetSequence() uint64
+	GetSize() uint64
 }
-
-// UnmarshalEvent is callback function for unmarshal binary to UnmarshalledEvent
-type UnmarshalEvent func(e Event) UnmarshalledEvent
 
 //go:generate moq -out eventx_mocks_test.go . Repository Timer
 
 // Repository for accessing database
-type Repository interface {
-	GetLastEvents(ctx context.Context, limit uint64) ([]Event, error)
-	GetUnprocessedEvents(ctx context.Context, limit uint64) ([]Event, error)
-	GetEventsFrom(ctx context.Context, from uint64, limit uint64) ([]Event, error)
+type Repository[E EventConstraint] interface {
+	GetLastEvents(ctx context.Context, limit uint64) ([]E, error)
+	GetUnprocessedEvents(ctx context.Context, limit uint64) ([]E, error)
+	GetEventsFrom(ctx context.Context, from uint64, limit uint64) ([]E, error)
 
-	UpdateSequences(ctx context.Context, events []Event) error
+	UpdateSequences(ctx context.Context, events []E) error
 }
 
 // Timer for timer
@@ -48,41 +36,41 @@ type Timer interface {
 }
 
 // Runner for running event handling
-type Runner struct {
-	repo      Repository
-	unmarshal UnmarshalEvent
-	options   eventxOptions
+type Runner[E EventConstraint] struct {
+	repo    Repository[E]
+	options eventxOptions
 
-	processor *dbProcessor
-	core      *coreService
+	processor *dbProcessor[E]
+	core      *coreService[E]
 }
 
 // Subscriber for subscribing to events
-type Subscriber struct {
+type Subscriber[E EventConstraint] struct {
 	from           uint64
 	fetchLimit     uint64
 	fetchSizeLimit uint64
 
-	repo      *sizeLimitedRepo
-	unmarshal UnmarshalEvent
+	repo *sizeLimitedRepo[E]
 
-	core        *coreService
-	respChan    chan fetchResponse
-	placeholder []UnmarshalledEvent
+	core        *coreService[E]
+	respChan    chan fetchResponse[E]
+	placeholder []E
 	receiving   bool
 }
 
 // NewRunner creates a Runner
-func NewRunner(repo Repository, unmarshal UnmarshalEvent, options ...Option) *Runner {
+func NewRunner[E EventConstraint](
+	repo Repository[E], setSequence func(event *E, seq uint64),
+	options ...Option,
+) *Runner[E] {
 	opts := computeOptions(options...)
-	coreChan := make(chan coreEvents, 256)
-	processor := newDBProcessor(repo, coreChan, opts)
-	core := newCoreService(coreChan, unmarshal, opts)
+	coreChan := make(chan []E, 256)
+	processor := newDBProcessor(repo, coreChan, setSequence, opts)
+	core := newCoreService(coreChan, opts)
 
-	return &Runner{
-		repo:      repo,
-		unmarshal: unmarshal,
-		options:   opts,
+	return &Runner[E]{
+		repo:    repo,
+		options: opts,
 
 		processor: processor,
 		core:      core,
@@ -97,7 +85,7 @@ func sleepContext(ctx context.Context, d time.Duration) {
 }
 
 //revive:disable:cognitive-complexity
-func (r *Runner) runDBProcessor(ctx context.Context) {
+func (r *Runner[E]) runDBProcessor(ctx context.Context) {
 OuterLoop:
 	for {
 		err := r.processor.init(ctx)
@@ -114,7 +102,7 @@ OuterLoop:
 		}
 
 		for {
-			err = r.processor.run(ctx)
+			err = r.processor.runProcessor(ctx)
 			if ctx.Err() != nil {
 				return
 			}
@@ -132,17 +120,17 @@ OuterLoop:
 
 //revive:enable:cognitive-complexity
 
-func (r *Runner) runCoreService(ctx context.Context) {
+func (r *Runner[E]) runCoreService(ctx context.Context) {
 	for {
-		r.core.run(ctx)
+		r.core.runCore(ctx)
 		if ctx.Err() != nil {
 			return
 		}
 	}
 }
 
-// Run starts the runner
-func (r *Runner) Run(ctx context.Context) {
+// Run the runner
+func (r *Runner[E]) Run(ctx context.Context) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -161,41 +149,41 @@ func (r *Runner) Run(ctx context.Context) {
 }
 
 // Signal to db processor
-func (r *Runner) Signal() {
-	r.processor.signal()
+func (r *Runner[E]) Signal() {
+	r.processor.doSignal()
 }
 
 // NewSubscriber creates a subscriber
-func (r *Runner) NewSubscriber(from uint64, fetchLimit uint64, options ...SubscriberOption) *Subscriber {
+func (r *Runner[E]) NewSubscriber(from uint64, fetchLimit uint64, options ...SubscriberOption) *Subscriber[E] {
 	opts := computeSubscriberOptions(options...)
 
-	return &Subscriber{
+	return &Subscriber[E]{
 		from:           from,
 		fetchLimit:     fetchLimit,
 		fetchSizeLimit: opts.sizeLimit,
 
-		repo:      newSizeLimitedRepo(r.repo, fetchLimit, opts.sizeLimit),
-		unmarshal: r.unmarshal,
+		repo: newSizeLimitedRepo[E](r.repo, fetchLimit, opts.sizeLimit),
 
 		core:        r.core,
-		respChan:    make(chan fetchResponse, 1),
-		placeholder: make([]UnmarshalledEvent, 0, fetchLimit),
+		respChan:    make(chan fetchResponse[E], 1),
+		placeholder: make([]E, 0, fetchLimit),
 	}
 }
 
-func cloneAndClearEvents(events []UnmarshalledEvent) []UnmarshalledEvent {
-	result := make([]UnmarshalledEvent, len(events))
+func cloneAndClearEvents[E any](events []E) []E {
+	result := make([]E, len(events))
 	copy(result, events)
 	for i := range events {
-		events[i] = nil
+		var empty E
+		events[i] = empty
 	}
 	return result
 }
 
 // Fetch get events
-func (s *Subscriber) Fetch(ctx context.Context) ([]UnmarshalledEvent, error) {
+func (s *Subscriber[E]) Fetch(ctx context.Context) ([]E, error) {
 	if !s.receiving {
-		s.core.fetch(fetchRequest{
+		s.core.doFetch(fetchRequest[E]{
 			from:        s.from,
 			limit:       s.fetchLimit,
 			sizeLimit:   s.fetchSizeLimit,
@@ -217,11 +205,11 @@ func (s *Subscriber) Fetch(ctx context.Context) ([]UnmarshalledEvent, error) {
 			if len(events) == 0 {
 				return nil, ErrEventNotFound
 			}
-			s.from = events[len(events)-1].Seq + 1
+			s.from = events[len(events)-1].GetSequence() + 1
 
-			unmarshalled := make([]UnmarshalledEvent, 0, len(events))
+			unmarshalled := make([]E, 0, len(events))
 			for _, e := range events {
-				unmarshalled = append(unmarshalled, s.unmarshal(e))
+				unmarshalled = append(unmarshalled, e)
 			}
 			return unmarshalled, nil
 		}

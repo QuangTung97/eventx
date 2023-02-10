@@ -10,17 +10,17 @@ import (
 )
 
 func TestSubscriber(t *testing.T) {
-	repo := &RepositoryMock{}
-	r := NewRunner(repo, unmarshalEvent)
+	repo := &RepositoryMock[testEvent]{}
+	r := NewRunner[testEvent](repo, setTestEventSeq)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]Event, error) {
-		return []Event{
-			{ID: 30, Seq: 18},
-			{ID: 28, Seq: 19},
-			{ID: 33, Seq: 20},
-			{ID: 32, Seq: 21},
+	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]testEvent, error) {
+		return []testEvent{
+			{id: 30, seq: 18},
+			{id: 28, seq: 19},
+			{id: 33, seq: 20},
+			{id: 32, seq: 21},
 		}, nil
 	}
 
@@ -35,9 +35,9 @@ func TestSubscriber(t *testing.T) {
 	sub := r.NewSubscriber(20, 5)
 	events, err := sub.Fetch(ctx)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []UnmarshalledEvent{
-		unmarshalEvent(Event{ID: 33, Seq: 20}),
-		unmarshalEvent(Event{ID: 32, Seq: 21}),
+	assert.Equal(t, []testEvent{
+		{id: 33, seq: 20},
+		{id: 32, seq: 21},
 	}, events)
 
 	cancel()
@@ -45,17 +45,17 @@ func TestSubscriber(t *testing.T) {
 }
 
 func TestSubscriber_WithSizeLimit(t *testing.T) {
-	repo := &RepositoryMock{}
-	r := NewRunner(repo, unmarshalEvent)
+	repo := &RepositoryMock[testEvent]{}
+	r := NewRunner[testEvent](repo, setTestEventSeq)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]Event, error) {
-		return []Event{
-			{ID: 30, Seq: 18, Data: stringSize(10)},
-			{ID: 28, Seq: 19, Data: stringSize(11)},
-			{ID: 33, Seq: 20, Data: stringSize(12)},
-			{ID: 32, Seq: 21, Data: stringSize(13)},
+	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]testEvent, error) {
+		return []testEvent{
+			{id: 30, seq: 18, size: 10},
+			{id: 28, seq: 19, size: 11},
+			{id: 33, seq: 20, size: 12},
+			{id: 32, seq: 21, size: 13},
 		}, nil
 	}
 
@@ -70,9 +70,9 @@ func TestSubscriber_WithSizeLimit(t *testing.T) {
 	sub := r.NewSubscriber(18, 5, WithSubscriberSizeLimit(32))
 	events, err := sub.Fetch(ctx)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []UnmarshalledEvent{
-		unmarshalEvent(Event{ID: 30, Seq: 18}),
-		unmarshalEvent(Event{ID: 28, Seq: 19}),
+	assert.Equal(t, []testEvent{
+		{id: 30, seq: 18, size: 10},
+		{id: 28, seq: 19, size: 11},
 	}, events)
 
 	cancel()
@@ -80,17 +80,17 @@ func TestSubscriber_WithSizeLimit(t *testing.T) {
 }
 
 func TestSubscriber_Context_Cancelled_Continue(t *testing.T) {
-	repo := &RepositoryMock{}
-	r := NewRunner(repo, unmarshalEvent)
+	repo := &RepositoryMock[testEvent]{}
+	r := NewRunner[testEvent](repo, setTestEventSeq)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]Event, error) {
-		return []Event{
-			{ID: 30, Seq: 18, Data: stringSize(10)},
-			{ID: 28, Seq: 19, Data: stringSize(11)},
-			{ID: 33, Seq: 20, Data: stringSize(12)},
-			{ID: 32, Seq: 21, Data: stringSize(13)},
+	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]testEvent, error) {
+		return []testEvent{
+			{id: 30, seq: 18, size: 10},
+			{id: 28, seq: 19, size: 11},
+			{id: 33, seq: 20, size: 12},
+			{id: 32, seq: 21, size: 13},
 		}, nil
 	}
 
@@ -109,20 +109,20 @@ func TestSubscriber_Context_Cancelled_Continue(t *testing.T) {
 
 	events, err := sub.Fetch(fetchCtx)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []UnmarshalledEvent(nil), events)
+	assert.Equal(t, []testEvent(nil), events)
 
 	events, err = sub.Fetch(ctx)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []UnmarshalledEvent{
-		testEvent{id: 30, seq: 18},
-		testEvent{id: 28, seq: 19},
+	assert.Equal(t, []testEvent{
+		{id: 30, seq: 18, size: 10},
+		{id: 28, seq: 19, size: 11},
 	}, events)
 
 	events, err = sub.Fetch(ctx)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []UnmarshalledEvent{
-		testEvent{id: 33, seq: 20},
-		testEvent{id: 32, seq: 21},
+	assert.Equal(t, []testEvent{
+		{id: 33, seq: 20, size: 12},
+		{id: 32, seq: 21, size: 13},
 	}, events)
 
 	cancel()
@@ -132,25 +132,25 @@ func TestSubscriber_Context_Cancelled_Continue(t *testing.T) {
 }
 
 func TestSubscriber_Not_Existed(t *testing.T) {
-	repo := &RepositoryMock{}
-	r := NewRunner(repo, unmarshalEvent)
+	repo := &RepositoryMock[testEvent]{}
+	r := NewRunner[testEvent](repo, setTestEventSeq)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]Event, error) {
-		return []Event{
-			{ID: 30, Seq: 18},
-			{ID: 28, Seq: 19},
-			{ID: 33, Seq: 20},
-			{ID: 32, Seq: 21},
+	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]testEvent, error) {
+		return []testEvent{
+			{id: 30, seq: 18},
+			{id: 28, seq: 19},
+			{id: 33, seq: 20},
+			{id: 32, seq: 21},
 		}, nil
 	}
 
-	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
-		return []Event{
-			{ID: 10, Seq: 17},
-			{ID: 12, Seq: 18},
-			{ID: 11, Seq: 19},
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]testEvent, error) {
+		return []testEvent{
+			{id: 10, seq: 17},
+			{id: 12, seq: 18},
+			{id: 11, seq: 19},
 		}, nil
 	}
 
@@ -165,10 +165,10 @@ func TestSubscriber_Not_Existed(t *testing.T) {
 	sub := r.NewSubscriber(17, 5)
 	events, err := sub.Fetch(ctx)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []UnmarshalledEvent{
-		unmarshalEvent(Event{ID: 10, Seq: 17}),
-		unmarshalEvent(Event{ID: 12, Seq: 18}),
-		unmarshalEvent(Event{ID: 11, Seq: 19}),
+	assert.Equal(t, []testEvent{
+		{id: 10, seq: 17},
+		{id: 12, seq: 18},
+		{id: 11, seq: 19},
 	}, events)
 
 	cancel()
@@ -176,25 +176,25 @@ func TestSubscriber_Not_Existed(t *testing.T) {
 }
 
 func TestSubscriber_Fetch_In_Mem_After_Access_DB(t *testing.T) {
-	repo := &RepositoryMock{}
-	r := NewRunner(repo, unmarshalEvent)
+	repo := &RepositoryMock[testEvent]{}
+	r := NewRunner[testEvent](repo, setTestEventSeq)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]Event, error) {
-		return []Event{
-			{ID: 30, Seq: 18},
-			{ID: 28, Seq: 19},
-			{ID: 33, Seq: 20},
-			{ID: 32, Seq: 21},
+	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]testEvent, error) {
+		return []testEvent{
+			{id: 30, seq: 18},
+			{id: 28, seq: 19},
+			{id: 33, seq: 20},
+			{id: 32, seq: 21},
 		}, nil
 	}
 
-	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
-		return []Event{
-			{ID: 10, Seq: 17},
-			{ID: 30, Seq: 18},
-			{ID: 28, Seq: 19},
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]testEvent, error) {
+		return []testEvent{
+			{id: 10, seq: 17},
+			{id: 30, seq: 18},
+			{id: 28, seq: 19},
 		}, nil
 	}
 
@@ -209,17 +209,17 @@ func TestSubscriber_Fetch_In_Mem_After_Access_DB(t *testing.T) {
 	sub := r.NewSubscriber(17, 5)
 	events, err := sub.Fetch(ctx)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []UnmarshalledEvent{
-		unmarshalEvent(Event{ID: 10, Seq: 17}),
-		unmarshalEvent(Event{ID: 30, Seq: 18}),
-		unmarshalEvent(Event{ID: 28, Seq: 19}),
+	assert.Equal(t, []testEvent{
+		{id: 10, seq: 17},
+		{id: 30, seq: 18},
+		{id: 28, seq: 19},
 	}, events)
 
 	events, err = sub.Fetch(ctx)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []UnmarshalledEvent{
-		unmarshalEvent(Event{ID: 33, Seq: 20}),
-		unmarshalEvent(Event{ID: 32, Seq: 21}),
+	assert.Equal(t, []testEvent{
+		{id: 33, seq: 20},
+		{id: 32, seq: 21},
 	}, events)
 
 	cancel()
@@ -227,21 +227,21 @@ func TestSubscriber_Fetch_In_Mem_After_Access_DB(t *testing.T) {
 }
 
 func TestSubscriber_GetEventsFrom_Returns_Error(t *testing.T) {
-	repo := &RepositoryMock{}
-	r := NewRunner(repo, unmarshalEvent)
+	repo := &RepositoryMock[testEvent]{}
+	r := NewRunner[testEvent](repo, setTestEventSeq)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]Event, error) {
-		return []Event{
-			{ID: 30, Seq: 18},
-			{ID: 28, Seq: 19},
-			{ID: 33, Seq: 20},
-			{ID: 32, Seq: 21},
+	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]testEvent, error) {
+		return []testEvent{
+			{id: 30, seq: 18},
+			{id: 28, seq: 19},
+			{id: 33, seq: 20},
+			{id: 32, seq: 21},
 		}, nil
 	}
 
-	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]testEvent, error) {
 		return nil, errors.New("get-events-error")
 	}
 
@@ -256,7 +256,7 @@ func TestSubscriber_GetEventsFrom_Returns_Error(t *testing.T) {
 	sub := r.NewSubscriber(17, 5)
 	events, err := sub.Fetch(ctx)
 	assert.Equal(t, errors.New("get-events-error"), err)
-	assert.Equal(t, []UnmarshalledEvent(nil), events)
+	assert.Equal(t, []testEvent(nil), events)
 	assert.Equal(t, uint64(17), sub.from)
 
 	cancel()
@@ -264,21 +264,21 @@ func TestSubscriber_GetEventsFrom_Returns_Error(t *testing.T) {
 }
 
 func TestSubscriber_GetEventsFrom_Returns_Empty(t *testing.T) {
-	repo := &RepositoryMock{}
-	r := NewRunner(repo, unmarshalEvent)
+	repo := &RepositoryMock[testEvent]{}
+	r := NewRunner[testEvent](repo, setTestEventSeq)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]Event, error) {
-		return []Event{
-			{ID: 30, Seq: 18},
-			{ID: 28, Seq: 19},
-			{ID: 33, Seq: 20},
-			{ID: 32, Seq: 21},
+	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]testEvent, error) {
+		return []testEvent{
+			{id: 30, seq: 18},
+			{id: 28, seq: 19},
+			{id: 33, seq: 20},
+			{id: 32, seq: 21},
 		}, nil
 	}
 
-	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]testEvent, error) {
 		return nil, nil
 	}
 
@@ -293,7 +293,7 @@ func TestSubscriber_GetEventsFrom_Returns_Empty(t *testing.T) {
 	sub := r.NewSubscriber(17, 5)
 	events, err := sub.Fetch(ctx)
 	assert.Equal(t, ErrEventNotFound, err)
-	assert.Equal(t, []UnmarshalledEvent(nil), events)
+	assert.Equal(t, []testEvent(nil), events)
 	assert.Equal(t, uint64(17), sub.from)
 
 	cancel()
@@ -301,18 +301,18 @@ func TestSubscriber_GetEventsFrom_Returns_Empty(t *testing.T) {
 }
 
 func TestSubscriber_Multiple_Fetch(t *testing.T) {
-	repo := &RepositoryMock{}
-	r := NewRunner(repo, unmarshalEvent)
+	repo := &RepositoryMock[testEvent]{}
+	r := NewRunner[testEvent](repo, setTestEventSeq)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]Event, error) {
-		return []Event{
-			{ID: 30, Seq: 18},
-			{ID: 28, Seq: 19},
-			{ID: 33, Seq: 20},
-			{ID: 32, Seq: 21},
-			{ID: 40, Seq: 22},
+	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]testEvent, error) {
+		return []testEvent{
+			{id: 30, seq: 18},
+			{id: 28, seq: 19},
+			{id: 33, seq: 20},
+			{id: 32, seq: 21},
+			{id: 40, seq: 22},
 		}, nil
 	}
 
@@ -327,17 +327,17 @@ func TestSubscriber_Multiple_Fetch(t *testing.T) {
 	sub := r.NewSubscriber(18, 3)
 	events, err := sub.Fetch(ctx)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []UnmarshalledEvent{
-		unmarshalEvent(Event{ID: 30, Seq: 18}),
-		unmarshalEvent(Event{ID: 28, Seq: 19}),
-		unmarshalEvent(Event{ID: 33, Seq: 20}),
+	assert.Equal(t, []testEvent{
+		{id: 30, seq: 18},
+		{id: 28, seq: 19},
+		{id: 33, seq: 20},
 	}, events)
 
 	events, err = sub.Fetch(ctx)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []UnmarshalledEvent{
-		unmarshalEvent(Event{ID: 32, Seq: 21}),
-		unmarshalEvent(Event{ID: 40, Seq: 22}),
+	assert.Equal(t, []testEvent{
+		{id: 32, seq: 21},
+		{id: 40, seq: 22},
 	}, events)
 
 	cancel()

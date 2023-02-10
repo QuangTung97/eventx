@@ -11,7 +11,7 @@ import (
 
 // Ensure, that RepositoryMock does implement Repository.
 // If this is not the case, regenerate this file with moq.
-var _ Repository = &RepositoryMock{}
+var _ Repository[EventConstraint] = &RepositoryMock[EventConstraint]{}
 
 // RepositoryMock is a mock implementation of Repository.
 //
@@ -19,16 +19,16 @@ var _ Repository = &RepositoryMock{}
 //
 //		// make and configure a mocked Repository
 //		mockedRepository := &RepositoryMock{
-//			GetEventsFromFunc: func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+//			GetEventsFromFunc: func(ctx context.Context, from uint64, limit uint64) ([]E, error) {
 //				panic("mock out the GetEventsFrom method")
 //			},
-//			GetLastEventsFunc: func(ctx context.Context, limit uint64) ([]Event, error) {
+//			GetLastEventsFunc: func(ctx context.Context, limit uint64) ([]E, error) {
 //				panic("mock out the GetLastEvents method")
 //			},
-//			GetUnprocessedEventsFunc: func(ctx context.Context, limit uint64) ([]Event, error) {
+//			GetUnprocessedEventsFunc: func(ctx context.Context, limit uint64) ([]E, error) {
 //				panic("mock out the GetUnprocessedEvents method")
 //			},
-//			UpdateSequencesFunc: func(ctx context.Context, events []Event) error {
+//			UpdateSequencesFunc: func(ctx context.Context, events []E) error {
 //				panic("mock out the UpdateSequences method")
 //			},
 //		}
@@ -37,18 +37,18 @@ var _ Repository = &RepositoryMock{}
 //		// and then make assertions.
 //
 //	}
-type RepositoryMock struct {
+type RepositoryMock[E EventConstraint] struct {
 	// GetEventsFromFunc mocks the GetEventsFrom method.
-	GetEventsFromFunc func(ctx context.Context, from uint64, limit uint64) ([]Event, error)
+	GetEventsFromFunc func(ctx context.Context, from uint64, limit uint64) ([]E, error)
 
 	// GetLastEventsFunc mocks the GetLastEvents method.
-	GetLastEventsFunc func(ctx context.Context, limit uint64) ([]Event, error)
+	GetLastEventsFunc func(ctx context.Context, limit uint64) ([]E, error)
 
 	// GetUnprocessedEventsFunc mocks the GetUnprocessedEvents method.
-	GetUnprocessedEventsFunc func(ctx context.Context, limit uint64) ([]Event, error)
+	GetUnprocessedEventsFunc func(ctx context.Context, limit uint64) ([]E, error)
 
 	// UpdateSequencesFunc mocks the UpdateSequences method.
-	UpdateSequencesFunc func(ctx context.Context, events []Event) error
+	UpdateSequencesFunc func(ctx context.Context, events []E) error
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -80,7 +80,7 @@ type RepositoryMock struct {
 			// Ctx is the ctx argument value.
 			Ctx context.Context
 			// Events is the events argument value.
-			Events []Event
+			Events []E
 		}
 	}
 	lockGetEventsFrom        sync.RWMutex
@@ -90,7 +90,7 @@ type RepositoryMock struct {
 }
 
 // GetEventsFrom calls GetEventsFromFunc.
-func (mock *RepositoryMock) GetEventsFrom(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+func (mock *RepositoryMock[E]) GetEventsFrom(ctx context.Context, from uint64, limit uint64) ([]E, error) {
 	if mock.GetEventsFromFunc == nil {
 		panic("RepositoryMock.GetEventsFromFunc: method is nil but Repository.GetEventsFrom was just called")
 	}
@@ -113,7 +113,7 @@ func (mock *RepositoryMock) GetEventsFrom(ctx context.Context, from uint64, limi
 // Check the length with:
 //
 //	len(mockedRepository.GetEventsFromCalls())
-func (mock *RepositoryMock) GetEventsFromCalls() []struct {
+func (mock *RepositoryMock[E]) GetEventsFromCalls() []struct {
 	Ctx   context.Context
 	From  uint64
 	Limit uint64
@@ -130,7 +130,7 @@ func (mock *RepositoryMock) GetEventsFromCalls() []struct {
 }
 
 // GetLastEvents calls GetLastEventsFunc.
-func (mock *RepositoryMock) GetLastEvents(ctx context.Context, limit uint64) ([]Event, error) {
+func (mock *RepositoryMock[E]) GetLastEvents(ctx context.Context, limit uint64) ([]E, error) {
 	if mock.GetLastEventsFunc == nil {
 		panic("RepositoryMock.GetLastEventsFunc: method is nil but Repository.GetLastEvents was just called")
 	}
@@ -151,7 +151,7 @@ func (mock *RepositoryMock) GetLastEvents(ctx context.Context, limit uint64) ([]
 // Check the length with:
 //
 //	len(mockedRepository.GetLastEventsCalls())
-func (mock *RepositoryMock) GetLastEventsCalls() []struct {
+func (mock *RepositoryMock[E]) GetLastEventsCalls() []struct {
 	Ctx   context.Context
 	Limit uint64
 } {
@@ -166,7 +166,7 @@ func (mock *RepositoryMock) GetLastEventsCalls() []struct {
 }
 
 // GetUnprocessedEvents calls GetUnprocessedEventsFunc.
-func (mock *RepositoryMock) GetUnprocessedEvents(ctx context.Context, limit uint64) ([]Event, error) {
+func (mock *RepositoryMock[E]) GetUnprocessedEvents(ctx context.Context, limit uint64) ([]E, error) {
 	if mock.GetUnprocessedEventsFunc == nil {
 		panic("RepositoryMock.GetUnprocessedEventsFunc: method is nil but Repository.GetUnprocessedEvents was just called")
 	}
@@ -187,7 +187,7 @@ func (mock *RepositoryMock) GetUnprocessedEvents(ctx context.Context, limit uint
 // Check the length with:
 //
 //	len(mockedRepository.GetUnprocessedEventsCalls())
-func (mock *RepositoryMock) GetUnprocessedEventsCalls() []struct {
+func (mock *RepositoryMock[E]) GetUnprocessedEventsCalls() []struct {
 	Ctx   context.Context
 	Limit uint64
 } {
@@ -202,13 +202,13 @@ func (mock *RepositoryMock) GetUnprocessedEventsCalls() []struct {
 }
 
 // UpdateSequences calls UpdateSequencesFunc.
-func (mock *RepositoryMock) UpdateSequences(ctx context.Context, events []Event) error {
+func (mock *RepositoryMock[E]) UpdateSequences(ctx context.Context, events []E) error {
 	if mock.UpdateSequencesFunc == nil {
 		panic("RepositoryMock.UpdateSequencesFunc: method is nil but Repository.UpdateSequences was just called")
 	}
 	callInfo := struct {
 		Ctx    context.Context
-		Events []Event
+		Events []E
 	}{
 		Ctx:    ctx,
 		Events: events,
@@ -223,13 +223,13 @@ func (mock *RepositoryMock) UpdateSequences(ctx context.Context, events []Event)
 // Check the length with:
 //
 //	len(mockedRepository.UpdateSequencesCalls())
-func (mock *RepositoryMock) UpdateSequencesCalls() []struct {
+func (mock *RepositoryMock[E]) UpdateSequencesCalls() []struct {
 	Ctx    context.Context
-	Events []Event
+	Events []E
 } {
 	var calls []struct {
 		Ctx    context.Context
-		Events []Event
+		Events []E
 	}
 	mock.lockUpdateSequences.RLock()
 	calls = mock.calls.UpdateSequences

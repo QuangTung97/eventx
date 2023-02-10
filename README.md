@@ -1,6 +1,6 @@
 # Library for Transactional Outbox with total ordering
 [![Go Report Card](https://goreportcard.com/badge/github.com/quangtung97/eventx)](https://goreportcard.com/report/github.com/quangtung97/eventx)
-[![GoCover](http://gocover.io/_badge/github.com/quangtung97/eventx)](http://gocover.io/github.com/quangtung97/eventx)
+[![Coverage Status](https://coveralls.io/repos/github/QuangTung97/eventx/badge.svg?branch=master)](https://coveralls.io/github/QuangTung97/eventx?branch=master)
 
 ## Main ideal
 

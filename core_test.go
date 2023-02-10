@@ -6,67 +6,69 @@ import (
 	"testing"
 )
 
-func drainRespChan(ch <-chan fetchResponse) fetchResponse {
+func drainRespChan(ch <-chan fetchResponse[testEvent]) fetchResponse[testEvent] {
 	select {
 	case resp := <-ch:
 		return resp
 	default:
-		return fetchResponse{}
+		return fetchResponse[testEvent]{}
 	}
 }
 
 type testEvent struct {
-	id  uint64
-	seq uint64
+	id   uint64
+	seq  uint64
+	size uint64
 }
 
 func (e testEvent) GetSequence() uint64 {
 	return e.seq
 }
 
-func unmarshalEvent(e Event) UnmarshalledEvent {
-	return testEvent{
-		id:  e.ID,
-		seq: e.Seq,
-	}
+func (e testEvent) GetSize() uint64 {
+	return e.size
 }
 
-func newCoreServiceTest(coreChan <-chan coreEvents, opts eventxOptions) *coreService {
-	return newCoreService(coreChan, unmarshalEvent, opts)
+func setTestEventSeq(event *testEvent, seq uint64) {
+	event.seq = seq
+}
+
+func newCoreServiceTest(coreChan <-chan []testEvent, opts eventxOptions) *coreService[testEvent] {
+	return newCoreService(coreChan, opts)
 }
 
 func TestCoreServiceFetch_SimpleCase(t *testing.T) {
 	t.Parallel()
 
-	coreChan := make(chan coreEvents, 1024)
+	coreChan := make(chan []testEvent, 1024)
 	s := newCoreServiceTest(coreChan, computeOptions())
 
-	coreChan <- []Event{
-		{ID: 10, Seq: 20},
-		{ID: 8, Seq: 21},
-		{ID: 12, Seq: 22},
+	coreChan <- []testEvent{
+		{id: 10, seq: 20},
+		{id: 8, seq: 21},
+		{id: 12, seq: 22},
 	}
 
 	ctx := context.Background()
-	s.run(ctx)
+	s.runCore(ctx)
 
-	respChan := make(chan fetchResponse, 1)
-	s.fetch(fetchRequest{
+	respChan := make(chan fetchResponse[testEvent], 1)
+	s.doFetch(fetchRequest[testEvent]{
 		limit:       2,
 		from:        20,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]testEvent, 0, 100),
 		respChan:    respChan,
 	})
-	s.run(ctx)
+	s.runCore(ctx)
 
 	assert.Equal(t, 1, len(respChan))
 
 	resp := drainRespChan(respChan)
-	assert.Equal(t, fetchResponse{
+	assert.Equal(t, fetchResponse[testEvent]{
 		existed: true,
-		events: []UnmarshalledEvent{
-			unmarshalEvent(Event{ID: 10, Seq: 20}),
-			unmarshalEvent(Event{ID: 8, Seq: 21}),
+		events: []testEvent{
+			{id: 10, seq: 20},
+			{id: 8, seq: 21},
 		},
 	}, resp)
 	assert.Equal(t, 100, cap(resp.events))
@@ -81,35 +83,35 @@ func TestCoreServiceRun_ContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	cancel()
 
-	s.run(ctx)
+	s.runCore(ctx)
 }
 
 func TestCoreServiceFetch_Behind(t *testing.T) {
 	t.Parallel()
 
-	coreChan := make(chan coreEvents, 1024)
+	coreChan := make(chan []testEvent, 1024)
 	s := newCoreServiceTest(coreChan, computeOptions())
 
-	coreChan <- []Event{
-		{ID: 8, Seq: 30},
+	coreChan <- []testEvent{
+		{id: 8, seq: 30},
 	}
 
 	ctx := context.Background()
-	s.run(ctx)
+	s.runCore(ctx)
 
-	respChan := make(chan fetchResponse, 1)
-	s.fetch(fetchRequest{
+	respChan := make(chan fetchResponse[testEvent], 1)
+	s.doFetch(fetchRequest[testEvent]{
 		limit:       2,
 		from:        20,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]testEvent, 0, 100),
 		respChan:    respChan,
 	})
-	s.run(ctx)
+	s.runCore(ctx)
 
 	assert.Equal(t, 1, len(respChan))
 
 	resp := drainRespChan(respChan)
-	assert.Equal(t, fetchResponse{
+	assert.Equal(t, fetchResponse[testEvent]{
 		existed: false,
 	}, resp)
 }
@@ -117,35 +119,35 @@ func TestCoreServiceFetch_Behind(t *testing.T) {
 func TestCoreServiceFetch_Multiple_Core_Events__Behind(t *testing.T) {
 	t.Parallel()
 
-	coreChan := make(chan coreEvents, 1024)
+	coreChan := make(chan []testEvent, 1024)
 	s := newCoreServiceTest(coreChan, computeOptions())
 
-	coreChan <- []Event{
-		{ID: 8, Seq: 30},
+	coreChan <- []testEvent{
+		{id: 8, seq: 30},
 	}
-	coreChan <- []Event{
-		{ID: 11, Seq: 31},
+	coreChan <- []testEvent{
+		{id: 11, seq: 31},
 	}
 	ctx := context.Background()
-	s.run(ctx)
-	s.run(ctx)
+	s.runCore(ctx)
+	s.runCore(ctx)
 
-	respChan := make(chan fetchResponse, 1)
-	s.fetch(fetchRequest{
+	respChan := make(chan fetchResponse[testEvent], 1)
+	s.doFetch(fetchRequest[testEvent]{
 		limit:       2,
 		from:        30,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]testEvent, 0, 100),
 		respChan:    respChan,
 	})
-	s.run(ctx)
+	s.runCore(ctx)
 
 	assert.Equal(t, 1, len(respChan))
 	resp := drainRespChan(respChan)
-	assert.Equal(t, fetchResponse{
+	assert.Equal(t, fetchResponse[testEvent]{
 		existed: true,
-		events: []UnmarshalledEvent{
-			unmarshalEvent(Event{ID: 8, Seq: 30}),
-			unmarshalEvent(Event{ID: 11, Seq: 31}),
+		events: []testEvent{
+			{id: 8, seq: 30},
+			{id: 11, seq: 31},
 		},
 	}, resp)
 	assert.Equal(t, 100, cap(resp.events))
@@ -154,84 +156,76 @@ func TestCoreServiceFetch_Multiple_Core_Events__Behind(t *testing.T) {
 func TestCoreServiceFetch_Limit_Exceed(t *testing.T) {
 	t.Parallel()
 
-	coreChan := make(chan coreEvents, 1024)
+	coreChan := make(chan []testEvent, 1024)
 	s := newCoreServiceTest(coreChan, computeOptions())
 
-	coreChan <- []Event{
-		{ID: 8, Seq: 30},
+	coreChan <- []testEvent{
+		{id: 8, seq: 30},
 	}
-	coreChan <- []Event{
-		{ID: 11, Seq: 31},
-		{ID: 15, Seq: 32},
+	coreChan <- []testEvent{
+		{id: 11, seq: 31},
+		{id: 15, seq: 32},
 	}
 	ctx := context.Background()
-	s.run(ctx)
-	s.run(ctx)
+	s.runCore(ctx)
+	s.runCore(ctx)
 
-	respChan := make(chan fetchResponse, 1)
-	s.fetch(fetchRequest{
+	respChan := make(chan fetchResponse[testEvent], 1)
+	s.doFetch(fetchRequest[testEvent]{
 		limit:       5,
 		from:        30,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]testEvent, 0, 100),
 		respChan:    respChan,
 	})
-	s.run(ctx)
+	s.runCore(ctx)
 
 	assert.Equal(t, 1, len(respChan))
 	resp := drainRespChan(respChan)
-	assert.Equal(t, fetchResponse{
+	assert.Equal(t, fetchResponse[testEvent]{
 		existed: true,
-		events: []UnmarshalledEvent{
-			unmarshalEvent(Event{ID: 8, Seq: 30}),
-			unmarshalEvent(Event{ID: 11, Seq: 31}),
-			unmarshalEvent(Event{ID: 15, Seq: 32}),
+		events: []testEvent{
+			{id: 8, seq: 30},
+			{id: 11, seq: 31},
+			{id: 15, seq: 32},
 		},
 	}, resp)
 	assert.Equal(t, 100, cap(resp.events))
 }
 
-func stringSize(n int) string {
-	data := make([]byte, n)
-	for i := range data {
-		data[i] = 'A'
-	}
-	return string(data)
-}
-
 func TestCoreServiceFetch_SizeLimit_Exceed(t *testing.T) {
 	t.Parallel()
 
-	coreChan := make(chan coreEvents, 1024)
+	coreChan := make(chan []testEvent, 1024)
 	s := newCoreServiceTest(coreChan, computeOptions())
 
-	coreChan <- []Event{
-		{ID: 8, Seq: 30, Data: stringSize(10)},
+	coreChan <- []testEvent{
+		{id: 8, seq: 30, size: 10},
 	}
-	coreChan <- []Event{
-		{ID: 11, Seq: 31, Data: stringSize(11)},
-		{ID: 15, Seq: 32, Data: stringSize(12)},
+	coreChan <- []testEvent{
+		{id: 11, seq: 31, size: 11},
+		{id: 15, seq: 32, size: 12},
 	}
 	ctx := context.Background()
-	s.run(ctx)
-	s.run(ctx)
+	s.runCore(ctx)
+	s.runCore(ctx)
 
-	respChan := make(chan fetchResponse, 1)
-	s.fetch(fetchRequest{
+	respChan := make(chan fetchResponse[testEvent], 1)
+	s.doFetch(fetchRequest[testEvent]{
 		from:        30,
 		limit:       5,
 		sizeLimit:   32,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]testEvent, 0, 100),
 		respChan:    respChan,
 	})
-	s.run(ctx)
+	s.runCore(ctx)
 
 	assert.Equal(t, 1, len(respChan))
 	resp := drainRespChan(respChan)
-	assert.Equal(t, fetchResponse{
+	assert.Equal(t, fetchResponse[testEvent]{
 		existed: true,
-		events: []UnmarshalledEvent{
-			unmarshalEvent(Event{ID: 8, Seq: 30}),
-			unmarshalEvent(Event{ID: 11, Seq: 31}),
+		events: []testEvent{
+			{id: 8, seq: 30, size: 10},
+			{id: 11, seq: 31, size: 11},
 		},
 	}, resp)
 	assert.Equal(t, 100, cap(resp.events))
@@ -240,34 +234,34 @@ func TestCoreServiceFetch_SizeLimit_Exceed(t *testing.T) {
 func TestCoreServiceFetch_Wrap_Around_And_Override_Not_Exist(t *testing.T) {
 	t.Parallel()
 
-	coreChan := make(chan coreEvents, 1024)
+	coreChan := make(chan []testEvent, 1024)
 	s := newCoreServiceTest(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
 
-	coreChan <- []Event{
-		{ID: 8, Seq: 30},
-		{ID: 9, Seq: 31},
+	coreChan <- []testEvent{
+		{id: 8, seq: 30},
+		{id: 9, seq: 31},
 	}
-	coreChan <- []Event{
-		{ID: 11, Seq: 32},
-		{ID: 15, Seq: 33},
-		{ID: 18, Seq: 34},
+	coreChan <- []testEvent{
+		{id: 11, seq: 32},
+		{id: 15, seq: 33},
+		{id: 18, seq: 34},
 	}
 	ctx := context.Background()
-	s.run(ctx)
-	s.run(ctx)
+	s.runCore(ctx)
+	s.runCore(ctx)
 
-	respChan := make(chan fetchResponse, 1)
-	s.fetch(fetchRequest{
+	respChan := make(chan fetchResponse[testEvent], 1)
+	s.doFetch(fetchRequest[testEvent]{
 		limit:       5,
 		from:        30,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]testEvent, 0, 100),
 		respChan:    respChan,
 	})
-	s.run(ctx)
+	s.runCore(ctx)
 
 	assert.Equal(t, 1, len(respChan))
 	resp := drainRespChan(respChan)
-	assert.Equal(t, fetchResponse{
+	assert.Equal(t, fetchResponse[testEvent]{
 		existed: false,
 	}, resp)
 }
@@ -275,40 +269,40 @@ func TestCoreServiceFetch_Wrap_Around_And_Override_Not_Exist(t *testing.T) {
 func TestCoreServiceFetch_Wrap_Around_And_Override_Exist(t *testing.T) {
 	t.Parallel()
 
-	coreChan := make(chan coreEvents, 1024)
+	coreChan := make(chan []testEvent, 1024)
 	s := newCoreServiceTest(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
 
-	coreChan <- []Event{
-		{ID: 8, Seq: 30},
-		{ID: 9, Seq: 31},
+	coreChan <- []testEvent{
+		{id: 8, seq: 30},
+		{id: 9, seq: 31},
 	}
-	coreChan <- []Event{
-		{ID: 11, Seq: 32},
-		{ID: 15, Seq: 33},
-		{ID: 18, Seq: 34},
+	coreChan <- []testEvent{
+		{id: 11, seq: 32},
+		{id: 15, seq: 33},
+		{id: 18, seq: 34},
 	}
 	ctx := context.Background()
-	s.run(ctx)
-	s.run(ctx)
+	s.runCore(ctx)
+	s.runCore(ctx)
 
-	respChan := make(chan fetchResponse, 1)
-	s.fetch(fetchRequest{
+	respChan := make(chan fetchResponse[testEvent], 1)
+	s.doFetch(fetchRequest[testEvent]{
 		limit:       6,
 		from:        31,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]testEvent, 0, 100),
 		respChan:    respChan,
 	})
-	s.run(ctx)
+	s.runCore(ctx)
 
 	assert.Equal(t, 1, len(respChan))
 	resp := drainRespChan(respChan)
-	assert.Equal(t, fetchResponse{
+	assert.Equal(t, fetchResponse[testEvent]{
 		existed: true,
-		events: []UnmarshalledEvent{
-			unmarshalEvent(Event{ID: 9, Seq: 31}),
-			unmarshalEvent(Event{ID: 11, Seq: 32}),
-			unmarshalEvent(Event{ID: 15, Seq: 33}),
-			unmarshalEvent(Event{ID: 18, Seq: 34}),
+		events: []testEvent{
+			{id: 9, seq: 31},
+			{id: 11, seq: 32},
+			{id: 15, seq: 33},
+			{id: 18, seq: 34},
 		},
 	}, resp)
 }
@@ -316,97 +310,97 @@ func TestCoreServiceFetch_Wrap_Around_And_Override_Exist(t *testing.T) {
 func TestCoreServiceFetch_Add_To_Wait_List(t *testing.T) {
 	t.Parallel()
 
-	coreChan := make(chan coreEvents, 1024)
+	coreChan := make(chan []testEvent, 1024)
 	s := newCoreServiceTest(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
 
-	coreChan <- []Event{
-		{ID: 8, Seq: 30},
-		{ID: 9, Seq: 31},
-		{ID: 11, Seq: 32},
-		{ID: 15, Seq: 33},
-		{ID: 18, Seq: 34},
+	coreChan <- []testEvent{
+		{id: 8, seq: 30},
+		{id: 9, seq: 31},
+		{id: 11, seq: 32},
+		{id: 15, seq: 33},
+		{id: 18, seq: 34},
 	}
 	ctx := context.Background()
-	s.run(ctx)
+	s.runCore(ctx)
 
-	respChan := make(chan fetchResponse, 1)
-	s.fetch(fetchRequest{
+	respChan := make(chan fetchResponse[testEvent], 1)
+	s.doFetch(fetchRequest[testEvent]{
 		limit:       2,
 		from:        35,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]testEvent, 0, 100),
 		respChan:    respChan,
 	})
-	s.run(ctx)
+	s.runCore(ctx)
 
 	assert.Equal(t, 0, len(respChan))
 
-	coreChan <- []Event{
-		{ID: 20, Seq: 35},
+	coreChan <- []testEvent{
+		{id: 20, seq: 35},
 	}
-	s.run(ctx)
+	s.runCore(ctx)
 
 	assert.Equal(t, 1, len(respChan))
 	resp := drainRespChan(respChan)
-	assert.Equal(t, fetchResponse{
+	assert.Equal(t, fetchResponse[testEvent]{
 		existed: true,
-		events: []UnmarshalledEvent{
-			unmarshalEvent(Event{ID: 20, Seq: 35}),
+		events: []testEvent{
+			{id: 20, seq: 35},
 		},
 	}, resp)
 
-	coreChan <- []Event{
-		{ID: 25, Seq: 36},
+	coreChan <- []testEvent{
+		{id: 25, seq: 36},
 	}
-	s.run(ctx)
+	s.runCore(ctx)
 	assert.Equal(t, 0, len(respChan))
 }
 
 func TestCoreServiceFetch_Wait_To_The_Far_Future(t *testing.T) {
 	t.Parallel()
 
-	coreChan := make(chan coreEvents, 1024)
+	coreChan := make(chan []testEvent, 1024)
 	s := newCoreServiceTest(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
 
-	coreChan <- []Event{
-		{ID: 8, Seq: 30},
-		{ID: 9, Seq: 31},
-		{ID: 11, Seq: 32},
-		{ID: 15, Seq: 33},
-		{ID: 18, Seq: 34},
+	coreChan <- []testEvent{
+		{id: 8, seq: 30},
+		{id: 9, seq: 31},
+		{id: 11, seq: 32},
+		{id: 15, seq: 33},
+		{id: 18, seq: 34},
 	}
 	ctx := context.Background()
-	s.run(ctx)
+	s.runCore(ctx)
 
-	respChan := make(chan fetchResponse, 1)
-	s.fetch(fetchRequest{
+	respChan := make(chan fetchResponse[testEvent], 1)
+	s.doFetch(fetchRequest[testEvent]{
 		limit:       2,
 		from:        36,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]testEvent, 0, 100),
 		respChan:    respChan,
 	})
-	s.run(ctx)
+	s.runCore(ctx)
 
 	assert.Equal(t, 0, len(respChan))
 
-	coreChan <- []Event{
-		{ID: 20, Seq: 35},
+	coreChan <- []testEvent{
+		{id: 20, seq: 35},
 	}
-	s.run(ctx)
+	s.runCore(ctx)
 
 	assert.Equal(t, 0, len(respChan))
 
-	coreChan <- []Event{
-		{ID: 22, Seq: 36},
-		{ID: 23, Seq: 37},
+	coreChan <- []testEvent{
+		{id: 22, seq: 36},
+		{id: 23, seq: 37},
 	}
-	s.run(ctx)
+	s.runCore(ctx)
 	assert.Equal(t, 1, len(respChan))
 	resp := drainRespChan(respChan)
-	assert.Equal(t, fetchResponse{
+	assert.Equal(t, fetchResponse[testEvent]{
 		existed: true,
-		events: []UnmarshalledEvent{
-			unmarshalEvent(Event{ID: 22, Seq: 36}),
-			unmarshalEvent(Event{ID: 23, Seq: 37}),
+		events: []testEvent{
+			{id: 22, seq: 36},
+			{id: 23, seq: 37},
 		},
 	}, resp)
 }
@@ -414,34 +408,34 @@ func TestCoreServiceFetch_Wait_To_The_Far_Future(t *testing.T) {
 func TestCoreServiceFetch_Core_Events_Not_In_Order__Not_Existed(t *testing.T) {
 	t.Parallel()
 
-	coreChan := make(chan coreEvents, 1024)
+	coreChan := make(chan []testEvent, 1024)
 	s := newCoreServiceTest(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
 
-	coreChan <- []Event{
-		{ID: 8, Seq: 30},
-		{ID: 9, Seq: 31},
-		{ID: 11, Seq: 32},
+	coreChan <- []testEvent{
+		{id: 8, seq: 30},
+		{id: 9, seq: 31},
+		{id: 11, seq: 32},
 	}
 	ctx := context.Background()
-	s.run(ctx)
+	s.runCore(ctx)
 
-	coreChan <- []Event{
-		{ID: 14, Seq: 38},
-		{ID: 12, Seq: 39},
-		{ID: 18, Seq: 40},
+	coreChan <- []testEvent{
+		{id: 14, seq: 38},
+		{id: 12, seq: 39},
+		{id: 18, seq: 40},
 	}
-	s.run(ctx)
+	s.runCore(ctx)
 
-	respChan := make(chan fetchResponse, 1)
-	s.fetch(fetchRequest{
+	respChan := make(chan fetchResponse[testEvent], 1)
+	s.doFetch(fetchRequest[testEvent]{
 		limit:       3,
 		from:        37,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]testEvent, 0, 100),
 		respChan:    respChan,
 	})
-	s.run(ctx)
+	s.runCore(ctx)
 	assert.Equal(t, 1, len(respChan))
-	assert.Equal(t, fetchResponse{
+	assert.Equal(t, fetchResponse[testEvent]{
 		existed: false,
 	}, drainRespChan(respChan))
 }
@@ -449,39 +443,39 @@ func TestCoreServiceFetch_Core_Events_Not_In_Order__Not_Existed(t *testing.T) {
 func TestCoreServiceFetch_Core_Events_Not_In_Order__Existed(t *testing.T) {
 	t.Parallel()
 
-	coreChan := make(chan coreEvents, 1024)
+	coreChan := make(chan []testEvent, 1024)
 	s := newCoreServiceTest(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
 
-	coreChan <- []Event{
-		{ID: 8, Seq: 30},
-		{ID: 9, Seq: 31},
-		{ID: 11, Seq: 32},
+	coreChan <- []testEvent{
+		{id: 8, seq: 30},
+		{id: 9, seq: 31},
+		{id: 11, seq: 32},
 	}
 	ctx := context.Background()
-	s.run(ctx)
+	s.runCore(ctx)
 
-	coreChan <- []Event{
-		{ID: 14, Seq: 38},
-		{ID: 12, Seq: 39},
-		{ID: 18, Seq: 40},
+	coreChan <- []testEvent{
+		{id: 14, seq: 38},
+		{id: 12, seq: 39},
+		{id: 18, seq: 40},
 	}
-	s.run(ctx)
+	s.runCore(ctx)
 
-	respChan := make(chan fetchResponse, 1)
-	s.fetch(fetchRequest{
+	respChan := make(chan fetchResponse[testEvent], 1)
+	s.doFetch(fetchRequest[testEvent]{
 		limit:       3,
 		from:        38,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]testEvent, 0, 100),
 		respChan:    respChan,
 	})
-	s.run(ctx)
+	s.runCore(ctx)
 	assert.Equal(t, 1, len(respChan))
-	assert.Equal(t, fetchResponse{
+	assert.Equal(t, fetchResponse[testEvent]{
 		existed: true,
-		events: []UnmarshalledEvent{
-			unmarshalEvent(Event{ID: 14, Seq: 38}),
-			unmarshalEvent(Event{ID: 12, Seq: 39}),
-			unmarshalEvent(Event{ID: 18, Seq: 40}),
+		events: []testEvent{
+			{id: 14, seq: 38},
+			{id: 12, seq: 39},
+			{id: 18, seq: 40},
 		},
 	}, drainRespChan(respChan))
 }
@@ -489,37 +483,37 @@ func TestCoreServiceFetch_Core_Events_Not_In_Order__Existed(t *testing.T) {
 func TestCoreServiceFetch_Wait_And_Events_Not_In_Order(t *testing.T) {
 	t.Parallel()
 
-	coreChan := make(chan coreEvents, 1024)
+	coreChan := make(chan []testEvent, 1024)
 	s := newCoreServiceTest(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
 
-	coreChan <- []Event{
-		{ID: 8, Seq: 30},
-		{ID: 9, Seq: 31},
-		{ID: 11, Seq: 32},
+	coreChan <- []testEvent{
+		{id: 8, seq: 30},
+		{id: 9, seq: 31},
+		{id: 11, seq: 32},
 	}
 	ctx := context.Background()
-	s.run(ctx)
+	s.runCore(ctx)
 
-	respChan := make(chan fetchResponse, 1)
-	s.fetch(fetchRequest{
+	respChan := make(chan fetchResponse[testEvent], 1)
+	s.doFetch(fetchRequest[testEvent]{
 		limit:       3,
 		from:        34,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]testEvent, 0, 100),
 		respChan:    respChan,
 	})
-	s.run(ctx)
+	s.runCore(ctx)
 
 	assert.Equal(t, 0, len(respChan))
 
-	coreChan <- []Event{
-		{ID: 14, Seq: 38},
-		{ID: 12, Seq: 39},
-		{ID: 18, Seq: 40},
+	coreChan <- []testEvent{
+		{id: 14, seq: 38},
+		{id: 12, seq: 39},
+		{id: 18, seq: 40},
 	}
-	s.run(ctx)
+	s.runCore(ctx)
 
 	assert.Equal(t, 1, len(respChan))
-	assert.Equal(t, fetchResponse{
+	assert.Equal(t, fetchResponse[testEvent]{
 		existed: false,
 	}, drainRespChan(respChan))
 }
@@ -527,40 +521,40 @@ func TestCoreServiceFetch_Wait_And_Events_Not_In_Order(t *testing.T) {
 func TestCoreServiceFetch_Core_Events_Go_Backward(t *testing.T) {
 	t.Parallel()
 
-	coreChan := make(chan coreEvents, 1024)
+	coreChan := make(chan []testEvent, 1024)
 	s := newCoreServiceTest(coreChan, computeOptions(WithCoreStoredEventsSize(4)))
 
-	coreChan <- []Event{
-		{ID: 8, Seq: 30},
-		{ID: 9, Seq: 31},
-		{ID: 11, Seq: 32},
+	coreChan <- []testEvent{
+		{id: 8, seq: 30},
+		{id: 9, seq: 31},
+		{id: 11, seq: 32},
 	}
 	ctx := context.Background()
-	s.run(ctx)
+	s.runCore(ctx)
 
-	coreChan <- []Event{
-		{ID: 14, Seq: 20},
-		{ID: 12, Seq: 21},
-		{ID: 18, Seq: 22},
+	coreChan <- []testEvent{
+		{id: 14, seq: 20},
+		{id: 12, seq: 21},
+		{id: 18, seq: 22},
 	}
-	s.run(ctx)
+	s.runCore(ctx)
 
-	respChan := make(chan fetchResponse, 1)
-	s.fetch(fetchRequest{
+	respChan := make(chan fetchResponse[testEvent], 1)
+	s.doFetch(fetchRequest[testEvent]{
 		limit:       6,
 		from:        20,
-		placeholder: make([]UnmarshalledEvent, 0, 100),
+		placeholder: make([]testEvent, 0, 100),
 		respChan:    respChan,
 	})
-	s.run(ctx)
+	s.runCore(ctx)
 
 	assert.Equal(t, 1, len(respChan))
-	assert.Equal(t, fetchResponse{
+	assert.Equal(t, fetchResponse[testEvent]{
 		existed: true,
-		events: []UnmarshalledEvent{
-			unmarshalEvent(Event{ID: 14, Seq: 20}),
-			unmarshalEvent(Event{ID: 12, Seq: 21}),
-			unmarshalEvent(Event{ID: 18, Seq: 22}),
+		events: []testEvent{
+			{id: 14, seq: 20},
+			{id: 12, seq: 21},
+			{id: 18, seq: 22},
 		},
 	}, drainRespChan(respChan))
 }
@@ -568,212 +562,212 @@ func TestCoreServiceFetch_Core_Events_Go_Backward(t *testing.T) {
 func TestComputeRequestToResponse(t *testing.T) {
 	table := []struct {
 		name   string
-		req    fetchRequest
+		req    fetchRequest[testEvent]
 		first  uint64
 		last   uint64
-		stored []storedEvent
-		resp   fetchResponse
+		stored []testEvent
+		resp   fetchResponse[testEvent]
 	}{
 		{
 			name: "normal",
-			req: fetchRequest{
+			req: fetchRequest[testEvent]{
 				from:  10,
 				limit: 4,
 			},
-			stored: []storedEvent{
-				{event: testEvent{id: 12, seq: 12}, size: 1},
-				{event: testEvent{id: 13, seq: 13}, size: 1},
-				{event: testEvent{id: 10, seq: 10}, size: 1},
-				{event: testEvent{id: 11, seq: 11}, size: 1},
+			stored: []testEvent{
+				{id: 12, seq: 12, size: 1},
+				{id: 13, seq: 13, size: 1},
+				{id: 10, seq: 10, size: 1},
+				{id: 11, seq: 11, size: 1},
 			},
 			first: 10,
 			last:  14,
-			resp: fetchResponse{
+			resp: fetchResponse[testEvent]{
 				existed: true,
-				events: []UnmarshalledEvent{
-					testEvent{id: 10, seq: 10},
-					testEvent{id: 11, seq: 11},
-					testEvent{id: 12, seq: 12},
-					testEvent{id: 13, seq: 13},
+				events: []testEvent{
+					{id: 10, seq: 10, size: 1},
+					{id: 11, seq: 11, size: 1},
+					{id: 12, seq: 12, size: 1},
+					{id: 13, seq: 13, size: 1},
 				},
 			},
 		},
 		{
 			name: "limit-below-last",
-			req: fetchRequest{
+			req: fetchRequest[testEvent]{
 				from:  10,
 				limit: 3,
 			},
-			stored: []storedEvent{
-				{event: testEvent{id: 12, seq: 12}},
-				{event: testEvent{id: 13, seq: 13}},
-				{event: testEvent{id: 10, seq: 10}},
-				{event: testEvent{id: 11, seq: 11}},
+			stored: []testEvent{
+				{id: 12, seq: 12},
+				{id: 13, seq: 13},
+				{id: 10, seq: 10},
+				{id: 11, seq: 11},
 			},
 			first: 10,
 			last:  14,
-			resp: fetchResponse{
+			resp: fetchResponse[testEvent]{
 				existed: true,
-				events: []UnmarshalledEvent{
-					testEvent{id: 10, seq: 10},
-					testEvent{id: 11, seq: 11},
-					testEvent{id: 12, seq: 12},
+				events: []testEvent{
+					{id: 10, seq: 10},
+					{id: 11, seq: 11},
+					{id: 12, seq: 12},
 				},
 			},
 		},
 		{
 			name: "limit-above-last",
-			req: fetchRequest{
+			req: fetchRequest[testEvent]{
 				from:  10,
 				limit: 5,
 			},
-			stored: []storedEvent{
-				{event: testEvent{id: 12, seq: 12}},
-				{event: testEvent{id: 13, seq: 13}},
-				{event: testEvent{id: 10, seq: 10}},
-				{event: testEvent{id: 11, seq: 11}},
+			stored: []testEvent{
+				{id: 12, seq: 12},
+				{id: 13, seq: 13},
+				{id: 10, seq: 10},
+				{id: 11, seq: 11},
 			},
 			first: 10,
 			last:  14,
-			resp: fetchResponse{
+			resp: fetchResponse[testEvent]{
 				existed: true,
-				events: []UnmarshalledEvent{
-					testEvent{id: 10, seq: 10},
-					testEvent{id: 11, seq: 11},
-					testEvent{id: 12, seq: 12},
-					testEvent{id: 13, seq: 13},
+				events: []testEvent{
+					{id: 10, seq: 10},
+					{id: 11, seq: 11},
+					{id: 12, seq: 12},
+					{id: 13, seq: 13},
 				},
 			},
 		},
 		{
 			name: "non-existed",
-			req: fetchRequest{
+			req: fetchRequest[testEvent]{
 				from:  9,
 				limit: 3,
 			},
-			stored: []storedEvent{
-				{event: testEvent{id: 12, seq: 12}},
-				{event: testEvent{id: 13, seq: 13}},
-				{event: testEvent{id: 10, seq: 10}},
-				{event: testEvent{id: 11, seq: 11}},
+			stored: []testEvent{
+				{id: 12, seq: 12},
+				{id: 13, seq: 13},
+				{id: 10, seq: 10},
+				{id: 11, seq: 11},
 			},
 			first: 10,
 			last:  14,
-			resp: fetchResponse{
+			resp: fetchResponse[testEvent]{
 				existed: false,
 			},
 		},
 		{
 			name: "size-limit-accept-two-events",
-			req: fetchRequest{
+			req: fetchRequest[testEvent]{
 				from:      10,
 				limit:     3,
 				sizeLimit: 10,
 			},
-			stored: []storedEvent{
-				{event: testEvent{id: 12, seq: 12}, size: 1},
-				{event: testEvent{id: 13, seq: 13}, size: 2},
-				{event: testEvent{id: 10, seq: 10}, size: 3},
-				{event: testEvent{id: 11, seq: 11}, size: 7},
+			stored: []testEvent{
+				{id: 12, seq: 12, size: 1},
+				{id: 13, seq: 13, size: 2},
+				{id: 10, seq: 10, size: 3},
+				{id: 11, seq: 11, size: 7},
 			},
 			first: 10,
 			last:  14,
-			resp: fetchResponse{
+			resp: fetchResponse[testEvent]{
 				existed: true,
-				events: []UnmarshalledEvent{
-					testEvent{id: 10, seq: 10},
-					testEvent{id: 11, seq: 11},
+				events: []testEvent{
+					{id: 10, seq: 10, size: 3},
+					{id: 11, seq: 11, size: 7},
 				},
 			},
 		},
 		{
 			name: "size-limit-smaller-than-first-event",
-			req: fetchRequest{
+			req: fetchRequest[testEvent]{
 				from:      10,
 				limit:     3,
 				sizeLimit: 4,
 			},
-			stored: []storedEvent{
-				{event: testEvent{id: 12, seq: 12}, size: 1},
-				{event: testEvent{id: 13, seq: 13}, size: 2},
-				{event: testEvent{id: 10, seq: 10}, size: 5},
-				{event: testEvent{id: 11, seq: 11}, size: 7},
+			stored: []testEvent{
+				{id: 12, seq: 12, size: 1},
+				{id: 13, seq: 13, size: 2},
+				{id: 10, seq: 10, size: 5},
+				{id: 11, seq: 11, size: 7},
 			},
 			first: 10,
 			last:  14,
-			resp: fetchResponse{
+			resp: fetchResponse[testEvent]{
 				existed: true,
-				events: []UnmarshalledEvent{
-					testEvent{id: 10, seq: 10},
+				events: []testEvent{
+					{id: 10, seq: 10, size: 5},
 				},
 			},
 		},
 		{
 			name: "size-limit-just-equal-first-event",
-			req: fetchRequest{
+			req: fetchRequest[testEvent]{
 				from:      10,
 				limit:     3,
 				sizeLimit: 5,
 			},
-			stored: []storedEvent{
-				{event: testEvent{id: 12, seq: 12}, size: 1},
-				{event: testEvent{id: 13, seq: 13}, size: 2},
-				{event: testEvent{id: 10, seq: 10}, size: 5},
-				{event: testEvent{id: 11, seq: 11}, size: 7},
+			stored: []testEvent{
+				{id: 12, seq: 12, size: 1},
+				{id: 13, seq: 13, size: 2},
+				{id: 10, seq: 10, size: 5},
+				{id: 11, seq: 11, size: 7},
 			},
 			first: 10,
 			last:  14,
-			resp: fetchResponse{
+			resp: fetchResponse[testEvent]{
 				existed: true,
-				events: []UnmarshalledEvent{
-					testEvent{id: 10, seq: 10},
+				events: []testEvent{
+					{id: 10, seq: 10, size: 5},
 				},
 			},
 		},
 		{
 			name: "size-limit-two-events",
-			req: fetchRequest{
+			req: fetchRequest[testEvent]{
 				from:      10,
 				limit:     3,
 				sizeLimit: 19,
 			},
-			stored: []storedEvent{
-				{event: testEvent{id: 12, seq: 12}, size: 8},
-				{event: testEvent{id: 13, seq: 13}, size: 2},
-				{event: testEvent{id: 10, seq: 10}, size: 5},
-				{event: testEvent{id: 11, seq: 11}, size: 7},
+			stored: []testEvent{
+				{id: 12, seq: 12, size: 8},
+				{id: 13, seq: 13, size: 2},
+				{id: 10, seq: 10, size: 5},
+				{id: 11, seq: 11, size: 7},
 			},
 			first: 10,
 			last:  14,
-			resp: fetchResponse{
+			resp: fetchResponse[testEvent]{
 				existed: true,
-				events: []UnmarshalledEvent{
-					testEvent{id: 10, seq: 10},
-					testEvent{id: 11, seq: 11},
+				events: []testEvent{
+					{id: 10, seq: 10, size: 5},
+					{id: 11, seq: 11, size: 7},
 				},
 			},
 		},
 		{
 			name: "size-limit-three-events",
-			req: fetchRequest{
+			req: fetchRequest[testEvent]{
 				from:      10,
 				limit:     3,
 				sizeLimit: 20,
 			},
-			stored: []storedEvent{
-				{event: testEvent{id: 12, seq: 12}, size: 8},
-				{event: testEvent{id: 13, seq: 13}, size: 2},
-				{event: testEvent{id: 10, seq: 10}, size: 5},
-				{event: testEvent{id: 11, seq: 11}, size: 7},
+			stored: []testEvent{
+				{id: 12, seq: 12, size: 8},
+				{id: 13, seq: 13, size: 2},
+				{id: 10, seq: 10, size: 5},
+				{id: 11, seq: 11, size: 7},
 			},
 			first: 10,
 			last:  14,
-			resp: fetchResponse{
+			resp: fetchResponse[testEvent]{
 				existed: true,
-				events: []UnmarshalledEvent{
-					testEvent{id: 10, seq: 10},
-					testEvent{id: 11, seq: 11},
-					testEvent{id: 12, seq: 12},
+				events: []testEvent{
+					{id: 10, seq: 10, size: 5},
+					{id: 11, seq: 11, size: 7},
+					{id: 12, seq: 12, size: 8},
 				},
 			},
 		},
@@ -793,21 +787,21 @@ func TestComputeRequestToResponse(t *testing.T) {
 func TestWaitListRemoveIf(t *testing.T) {
 	table := []struct {
 		name     string
-		waitList []fetchRequest
+		waitList []fetchRequest[testEvent]
 		last     uint64
 		offset   int
-		expected []fetchRequest
+		expected []fetchRequest[testEvent]
 	}{
 		{
 			name: "no-remove",
-			waitList: []fetchRequest{
+			waitList: []fetchRequest[testEvent]{
 				{limit: 1, from: 10},
 				{limit: 2, from: 8},
 				{limit: 3, from: 9},
 			},
 			last:   8,
 			offset: 3,
-			expected: []fetchRequest{
+			expected: []fetchRequest[testEvent]{
 				{limit: 1, from: 10},
 				{limit: 2, from: 8},
 				{limit: 3, from: 9},
@@ -815,14 +809,14 @@ func TestWaitListRemoveIf(t *testing.T) {
 		},
 		{
 			name: "single-remove",
-			waitList: []fetchRequest{
+			waitList: []fetchRequest[testEvent]{
 				{limit: 1, from: 10},
 				{limit: 2, from: 8},
 				{limit: 3, from: 9},
 			},
 			last:   9,
 			offset: 2,
-			expected: []fetchRequest{
+			expected: []fetchRequest[testEvent]{
 				{limit: 1, from: 10},
 				{limit: 3, from: 9},
 				{limit: 2, from: 8},
@@ -830,14 +824,14 @@ func TestWaitListRemoveIf(t *testing.T) {
 		},
 		{
 			name: "two-remove",
-			waitList: []fetchRequest{
+			waitList: []fetchRequest[testEvent]{
 				{limit: 1, from: 10},
 				{limit: 2, from: 8},
 				{limit: 3, from: 9},
 			},
 			last:   10,
 			offset: 1,
-			expected: []fetchRequest{
+			expected: []fetchRequest[testEvent]{
 				{limit: 1, from: 10},
 				{limit: 3, from: 9},
 				{limit: 2, from: 8},
@@ -845,14 +839,14 @@ func TestWaitListRemoveIf(t *testing.T) {
 		},
 		{
 			name: "all-remove",
-			waitList: []fetchRequest{
+			waitList: []fetchRequest[testEvent]{
 				{limit: 1, from: 10},
 				{limit: 2, from: 8},
 				{limit: 3, from: 9},
 			},
 			last:   11,
 			offset: 0,
-			expected: []fetchRequest{
+			expected: []fetchRequest[testEvent]{
 				{limit: 2, from: 8},
 				{limit: 3, from: 9},
 				{limit: 1, from: 10},
@@ -860,7 +854,7 @@ func TestWaitListRemoveIf(t *testing.T) {
 		},
 		{
 			name: "normal",
-			waitList: []fetchRequest{
+			waitList: []fetchRequest[testEvent]{
 				{limit: 0, from: 7},
 				{limit: 1, from: 10},
 				{limit: 2, from: 8},
@@ -870,7 +864,7 @@ func TestWaitListRemoveIf(t *testing.T) {
 			},
 			last:   10,
 			offset: 3,
-			expected: []fetchRequest{
+			expected: []fetchRequest[testEvent]{
 				{limit: 5, from: 10},
 				{limit: 1, from: 10},
 				{limit: 4, from: 11},
@@ -885,7 +879,7 @@ func TestWaitListRemoveIf(t *testing.T) {
 		e := tc
 		t.Run(e.name, func(t *testing.T) {
 			t.Parallel()
-			offset := waitListRemoveIf(e.waitList, func(req fetchRequest) bool {
+			offset := waitListRemoveIf(e.waitList, func(req fetchRequest[testEvent]) bool {
 				return req.from < e.last
 			})
 			assert.Equal(t, e.offset, offset)

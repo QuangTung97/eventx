@@ -2,28 +2,35 @@ package eventx
 
 import "context"
 
-type coreEvents []Event
-
-type dbProcessor struct {
+type dbProcessor[E EventConstraint] struct {
 	options    eventxOptions
-	repo       Repository
-	coreChan   chan<- coreEvents
+	repo       Repository[E]
+	coreChan   chan<- []E
 	signalChan chan struct{}
 
 	lastSequence uint64
 	retryTimer   Timer
+
+	setSequence func(event *E, sequence uint64)
 }
 
-func newDBProcessor(repo Repository, coreChan chan<- coreEvents, options eventxOptions) *dbProcessor {
-	return &dbProcessor{
+func newDBProcessor[E EventConstraint](
+	repo Repository[E],
+	coreChan chan<- []E,
+	setSequence func(event *E, sequence uint64),
+	options eventxOptions,
+) *dbProcessor[E] {
+	return &dbProcessor[E]{
 		options:    options,
 		repo:       repo,
 		signalChan: make(chan struct{}, 1024),
 		coreChan:   coreChan,
+
+		setSequence: setSequence,
 	}
 }
 
-func (p *dbProcessor) init(ctx context.Context) error {
+func (p *dbProcessor[E]) init(ctx context.Context) error {
 	p.lastSequence = 0
 	p.retryTimer = newTimer(p.options.dbProcessorRetryTimer)
 
@@ -33,21 +40,21 @@ func (p *dbProcessor) init(ctx context.Context) error {
 	}
 
 	if len(events) > 0 {
-		p.lastSequence = events[len(events)-1].Seq
+		p.lastSequence = events[len(events)-1].GetSequence()
 		p.coreChan <- events
 	}
 
 	return nil
 }
 
-func (p *dbProcessor) signal() {
+func (p *dbProcessor[E]) doSignal() {
 	select {
 	case p.signalChan <- struct{}{}:
 	default:
 	}
 }
 
-func (p *dbProcessor) handleSignalLoop(ctx context.Context) error {
+func (p *dbProcessor[E]) handleSignalLoop(ctx context.Context) error {
 	for {
 		continued, err := p.handleSignal(ctx)
 		if err != nil {
@@ -59,7 +66,7 @@ func (p *dbProcessor) handleSignalLoop(ctx context.Context) error {
 	}
 }
 
-func (p *dbProcessor) handleSignal(ctx context.Context) (bool, error) {
+func (p *dbProcessor[E]) handleSignal(ctx context.Context) (bool, error) {
 	continued := false
 
 	events, err := p.repo.GetUnprocessedEvents(ctx, p.options.getUnprocessedEventsLimit)
@@ -75,7 +82,7 @@ func (p *dbProcessor) handleSignal(ctx context.Context) (bool, error) {
 
 	for i := range events {
 		p.lastSequence++
-		events[i].Seq = p.lastSequence
+		p.setSequence(&events[i], p.lastSequence)
 	}
 
 	err = p.repo.UpdateSequences(ctx, events)
@@ -87,7 +94,7 @@ func (p *dbProcessor) handleSignal(ctx context.Context) (bool, error) {
 	return continued, nil
 }
 
-func (p *dbProcessor) run(ctx context.Context) error {
+func (p *dbProcessor[E]) runProcessor(ctx context.Context) error {
 	select {
 	case <-p.signalChan:
 		p.retryTimer.Reset()
