@@ -15,28 +15,28 @@ var _ Repository = &RepositoryMock{}
 
 // RepositoryMock is a mock implementation of Repository.
 //
-// 	func TestSomethingThatUsesRepository(t *testing.T) {
+//	func TestSomethingThatUsesRepository(t *testing.T) {
 //
-// 		// make and configure a mocked Repository
-// 		mockedRepository := &RepositoryMock{
-// 			GetEventsFromFunc: func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
-// 				panic("mock out the GetEventsFrom method")
-// 			},
-// 			GetLastEventsFunc: func(ctx context.Context, limit uint64) ([]Event, error) {
-// 				panic("mock out the GetLastEvents method")
-// 			},
-// 			GetUnprocessedEventsFunc: func(ctx context.Context, limit uint64) ([]Event, error) {
-// 				panic("mock out the GetUnprocessedEvents method")
-// 			},
-// 			UpdateSequencesFunc: func(ctx context.Context, events []Event) error {
-// 				panic("mock out the UpdateSequences method")
-// 			},
-// 		}
+//		// make and configure a mocked Repository
+//		mockedRepository := &RepositoryMock{
+//			GetEventsFromFunc: func(ctx context.Context, from uint64, limit uint64) ([]Event, error) {
+//				panic("mock out the GetEventsFrom method")
+//			},
+//			GetLastEventsFunc: func(ctx context.Context, limit uint64) ([]Event, error) {
+//				panic("mock out the GetLastEvents method")
+//			},
+//			GetUnprocessedEventsFunc: func(ctx context.Context, limit uint64) ([]Event, error) {
+//				panic("mock out the GetUnprocessedEvents method")
+//			},
+//			UpdateSequencesFunc: func(ctx context.Context, events []Event) error {
+//				panic("mock out the UpdateSequences method")
+//			},
+//		}
 //
-// 		// use mockedRepository in code that requires Repository
-// 		// and then make assertions.
+//		// use mockedRepository in code that requires Repository
+//		// and then make assertions.
 //
-// 	}
+//	}
 type RepositoryMock struct {
 	// GetEventsFromFunc mocks the GetEventsFrom method.
 	GetEventsFromFunc func(ctx context.Context, from uint64, limit uint64) ([]Event, error)
@@ -111,7 +111,8 @@ func (mock *RepositoryMock) GetEventsFrom(ctx context.Context, from uint64, limi
 
 // GetEventsFromCalls gets all the calls that were made to GetEventsFrom.
 // Check the length with:
-//     len(mockedRepository.GetEventsFromCalls())
+//
+//	len(mockedRepository.GetEventsFromCalls())
 func (mock *RepositoryMock) GetEventsFromCalls() []struct {
 	Ctx   context.Context
 	From  uint64
@@ -148,7 +149,8 @@ func (mock *RepositoryMock) GetLastEvents(ctx context.Context, limit uint64) ([]
 
 // GetLastEventsCalls gets all the calls that were made to GetLastEvents.
 // Check the length with:
-//     len(mockedRepository.GetLastEventsCalls())
+//
+//	len(mockedRepository.GetLastEventsCalls())
 func (mock *RepositoryMock) GetLastEventsCalls() []struct {
 	Ctx   context.Context
 	Limit uint64
@@ -183,7 +185,8 @@ func (mock *RepositoryMock) GetUnprocessedEvents(ctx context.Context, limit uint
 
 // GetUnprocessedEventsCalls gets all the calls that were made to GetUnprocessedEvents.
 // Check the length with:
-//     len(mockedRepository.GetUnprocessedEventsCalls())
+//
+//	len(mockedRepository.GetUnprocessedEventsCalls())
 func (mock *RepositoryMock) GetUnprocessedEventsCalls() []struct {
 	Ctx   context.Context
 	Limit uint64
@@ -218,7 +221,8 @@ func (mock *RepositoryMock) UpdateSequences(ctx context.Context, events []Event)
 
 // UpdateSequencesCalls gets all the calls that were made to UpdateSequences.
 // Check the length with:
-//     len(mockedRepository.UpdateSequencesCalls())
+//
+//	len(mockedRepository.UpdateSequencesCalls())
 func (mock *RepositoryMock) UpdateSequencesCalls() []struct {
 	Ctx    context.Context
 	Events []Event
@@ -239,25 +243,25 @@ var _ Timer = &TimerMock{}
 
 // TimerMock is a mock implementation of Timer.
 //
-// 	func TestSomethingThatUsesTimer(t *testing.T) {
+//	func TestSomethingThatUsesTimer(t *testing.T) {
 //
-// 		// make and configure a mocked Timer
-// 		mockedTimer := &TimerMock{
-// 			ChanFunc: func() <-chan time.Time {
-// 				panic("mock out the Chan method")
-// 			},
-// 			ResetFunc: func()  {
-// 				panic("mock out the Reset method")
-// 			},
-// 			ResetAfterChanFunc: func()  {
-// 				panic("mock out the ResetAfterChan method")
-// 			},
-// 		}
+//		// make and configure a mocked Timer
+//		mockedTimer := &TimerMock{
+//			ChanFunc: func() <-chan time.Time {
+//				panic("mock out the Chan method")
+//			},
+//			ResetFunc: func()  {
+//				panic("mock out the Reset method")
+//			},
+//			ResetAfterChanFunc: func()  {
+//				panic("mock out the ResetAfterChan method")
+//			},
+//		}
 //
-// 		// use mockedTimer in code that requires Timer
-// 		// and then make assertions.
+//		// use mockedTimer in code that requires Timer
+//		// and then make assertions.
 //
-// 	}
+//	}
 type TimerMock struct {
 	// ChanFunc mocks the Chan method.
 	ChanFunc func() <-chan time.Time
@@ -300,7 +304,8 @@ func (mock *TimerMock) Chan() <-chan time.Time {
 
 // ChanCalls gets all the calls that were made to Chan.
 // Check the length with:
-//     len(mockedTimer.ChanCalls())
+//
+//	len(mockedTimer.ChanCalls())
 func (mock *TimerMock) ChanCalls() []struct {
 } {
 	var calls []struct {
@@ -326,7 +331,8 @@ func (mock *TimerMock) Reset() {
 
 // ResetCalls gets all the calls that were made to Reset.
 // Check the length with:
-//     len(mockedTimer.ResetCalls())
+//
+//	len(mockedTimer.ResetCalls())
 func (mock *TimerMock) ResetCalls() []struct {
 } {
 	var calls []struct {
@@ -352,7 +358,8 @@ func (mock *TimerMock) ResetAfterChan() {
 
 // ResetAfterChanCalls gets all the calls that were made to ResetAfterChan.
 // Check the length with:
-//     len(mockedTimer.ResetAfterChanCalls())
+//
+//	len(mockedTimer.ResetAfterChanCalls())
 func (mock *TimerMock) ResetAfterChanCalls() []struct {
 } {
 	var calls []struct {
