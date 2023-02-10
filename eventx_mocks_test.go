@@ -9,10 +9,6 @@ import (
 	"time"
 )
 
-// Ensure, that RepositoryMock does implement Repository.
-// If this is not the case, regenerate this file with moq.
-var _ Repository[EventConstraint] = &RepositoryMock[EventConstraint]{}
-
 // RepositoryMock is a mock implementation of Repository.
 //
 //	func TestSomethingThatUsesRepository(t *testing.T) {
@@ -236,10 +232,6 @@ func (mock *RepositoryMock[E]) UpdateSequencesCalls() []struct {
 	mock.lockUpdateSequences.RUnlock()
 	return calls
 }
-
-// Ensure, that TimerMock does implement Timer.
-// If this is not the case, regenerate this file with moq.
-var _ Timer = &TimerMock{}
 
 // TimerMock is a mock implementation of Timer.
 //

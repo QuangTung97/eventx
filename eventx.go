@@ -17,7 +17,7 @@ type EventConstraint interface {
 	GetSize() uint64
 }
 
-//go:generate moq -out eventx_mocks_test.go . Repository Timer
+//go:generate moq -skip-ensure -out eventx_mocks_test.go . Repository Timer
 
 // Repository for accessing database
 type Repository[E EventConstraint] interface {
