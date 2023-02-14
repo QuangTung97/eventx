@@ -180,7 +180,7 @@ func cloneAndClearEvents[E any](events []E) []E {
 	return result
 }
 
-// Fetch get events
+// Fetch get events, if ctx is cancelled / deadline exceed then the fetch will returned with error = nil
 func (s *Subscriber[E]) Fetch(ctx context.Context) ([]E, error) {
 	if !s.receiving {
 		s.core.doFetch(fetchRequest[E]{

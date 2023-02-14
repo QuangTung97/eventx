@@ -129,15 +129,19 @@ func (r *repoTest) UpdateSequences(_ context.Context, events []testEvent) error 
 
 func (r *repoTest) insertEvents(events []testEvent) {
 	r.mut.Lock()
+	for i := range events {
+		r.nextID++
+		id := r.nextID
+		events[i].id = id
+	}
+	r.mut.Unlock()
+
+	r.mut.Lock()
 	defer r.mut.Unlock()
 
 	for _, e := range events {
-		r.nextID++
-		id := r.nextID
-		e.id = id
-
-		r.events[id] = e
-		r.eventIDs = append(r.eventIDs, id)
+		r.events[e.id] = e
+		r.eventIDs = append(r.eventIDs, e.id)
 	}
 }
 
