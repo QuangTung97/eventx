@@ -30,7 +30,8 @@ func newPropertyTest() *propertyTest {
 	return p
 }
 
-func TestEventx_Property_Based(t *testing.T) {
+//revive:disable-next-line:cognitive-complexity
+func TestEventx_Property_Based(*testing.T) {
 	seed := time.Now().UnixNano()
 	rand.Seed(seed)
 	fmt.Println("SEED:", seed)
