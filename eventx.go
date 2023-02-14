@@ -205,6 +205,9 @@ func (s *Subscriber[E]) Fetch(ctx context.Context) ([]E, error) {
 			if len(events) == 0 {
 				return nil, ErrEventNotFound
 			}
+			if events[0].GetSequence() != s.from {
+				return nil, ErrEventNotFound
+			}
 			s.from = events[len(events)-1].GetSequence() + 1
 
 			unmarshalled := make([]E, 0, len(events))

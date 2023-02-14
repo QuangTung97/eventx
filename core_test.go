@@ -74,6 +74,39 @@ func TestCoreServiceFetch_SimpleCase(t *testing.T) {
 	assert.Equal(t, 100, cap(resp.events))
 }
 
+func TestCoreServiceFetch_From_Zero(t *testing.T) {
+	t.Parallel()
+
+	coreChan := make(chan []testEvent, 1024)
+	s := newCoreServiceTest(coreChan, computeOptions())
+
+	coreChan <- []testEvent{
+		{id: 10, seq: 20},
+		{id: 8, seq: 21},
+		{id: 12, seq: 22},
+	}
+
+	ctx := context.Background()
+	s.runCore(ctx)
+
+	respChan := make(chan fetchResponse[testEvent], 1)
+	s.doFetch(fetchRequest[testEvent]{
+		limit:       2,
+		from:        0,
+		placeholder: make([]testEvent, 0, 100),
+		respChan:    respChan,
+	})
+	s.runCore(ctx)
+
+	assert.Equal(t, 1, len(respChan))
+
+	resp := drainRespChan(respChan)
+	assert.Equal(t, fetchResponse[testEvent]{
+		existed: false,
+	}, resp)
+	assert.Equal(t, 0, cap(resp.events))
+}
+
 func TestCoreServiceRun_ContextCancel(t *testing.T) {
 	t.Parallel()
 

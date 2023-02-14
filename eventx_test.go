@@ -300,6 +300,46 @@ func TestSubscriber_GetEventsFrom_Returns_Empty(t *testing.T) {
 	wg.Wait()
 }
 
+func TestSubscriber_GetEventsFrom__Returns_Missing_First_Sequence(t *testing.T) {
+	repo := &RepositoryMock[testEvent]{}
+	r := NewRunner[testEvent](repo, setTestEventSeq)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]testEvent, error) {
+		return []testEvent{
+			{id: 30, seq: 18},
+			{id: 28, seq: 19},
+			{id: 33, seq: 20},
+			{id: 32, seq: 21},
+		}, nil
+	}
+
+	repo.GetEventsFromFunc = func(ctx context.Context, from uint64, limit uint64) ([]testEvent, error) {
+		return []testEvent{
+			{id: 30, seq: 18},
+			{id: 28, seq: 19},
+		}, nil
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		r.Run(ctx)
+	}()
+
+	sub := r.NewSubscriber(17, 5)
+	events, err := sub.Fetch(ctx)
+	assert.Equal(t, ErrEventNotFound, err)
+	assert.Equal(t, []testEvent(nil), events)
+	assert.Equal(t, uint64(17), sub.from)
+
+	cancel()
+	wg.Wait()
+}
+
 func TestSubscriber_Multiple_Fetch(t *testing.T) {
 	repo := &RepositoryMock[testEvent]{}
 	r := NewRunner[testEvent](repo, setTestEventSeq)

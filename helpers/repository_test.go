@@ -43,9 +43,10 @@ func (r *repoTest) GetLastEvents(_ context.Context, limit uint64) ([]testEvent, 
 	r.mut.Lock()
 	defer r.mut.Unlock()
 
-	var maxSeq uint64
-	var minSeq uint64 = math.MaxUint64
-	for seq := range r.seqMap {
+	var maxSeq int64
+	var minSeq int64 = math.MaxInt64
+	for s := range r.seqMap {
+		seq := int64(s)
 		if seq > maxSeq {
 			maxSeq = seq
 		}
@@ -56,13 +57,13 @@ func (r *repoTest) GetLastEvents(_ context.Context, limit uint64) ([]testEvent, 
 
 	var result []testEvent
 
-	start := int64(minSeq)
-	bound := int64(maxSeq) - int64(limit) + 1
+	start := minSeq
+	bound := maxSeq - int64(limit) + 1
 	if start < bound {
 		start = bound
 	}
 
-	for seq := start; seq <= int64(maxSeq); seq++ {
+	for seq := start; seq <= maxSeq; seq++ {
 		if len(result) >= int(limit) {
 			break
 		}

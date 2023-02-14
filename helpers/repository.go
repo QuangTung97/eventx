@@ -24,6 +24,10 @@ func CheckRepoImpl[E eventx.EventConstraint](
 	t.Run("insert-then-get-unprocessed--then-update--then-get-get-events-from", func(t *testing.T) {
 		truncateFunc()
 
+		events, err := repo.GetLastEvents(context.Background(), 10)
+		assert.Equal(t, nil, err)
+		assert.Equal(t, 0, len(events))
+
 		ev1 := randomEvent()
 		ev2 := randomEvent()
 		ev3 := randomEvent()
@@ -38,7 +42,7 @@ func CheckRepoImpl[E eventx.EventConstraint](
 		setID(&ev4, 4)
 		setID(&ev5, 5)
 
-		events, err := repo.GetUnprocessedEvents(context.Background(), 10)
+		events, err = repo.GetUnprocessedEvents(context.Background(), 10)
 		assert.Equal(t, nil, err)
 		assert.Equal(t, []E{ev1, ev2, ev3, ev4, ev5}, events)
 
