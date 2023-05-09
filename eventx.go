@@ -2,30 +2,56 @@ package eventx
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"go.uber.org/zap"
 	"sync"
 	"time"
 )
 
-// ErrEventNotFound when select from events table not find any events
+// ErrEventNotFound when select from events table not find events >= sequence (because of retention)
 var ErrEventNotFound = errors.New("not found any events from a sequence")
 
 // EventConstraint a type constraint for event
 type EventConstraint interface {
+	// GetSequence returns the event sequence number, = 0 if sequence is null
 	GetSequence() uint64
+
+	// GetSize returns the approximate size (in bytes) of the event, for limit batch size by event data size
+	// using WithSubscriberSizeLimit for configuring this limit
 	GetSize() uint64
 }
 
-//go:generate moq -skip-ensure -out eventx_mocks_test.go . Repository Timer
+//go:generate moq -skip-ensure -out eventx_mocks_test.go . Repository RetentionRepository Timer
 
-// Repository for accessing database
+// Repository for accessing database, MUST be thread safe
 type Repository[E EventConstraint] interface {
+	// GetLastEvents returns top *limit* events (events with the highest sequence numbers),
+	// by sequence number in ascending order, ignore events with null sequence number
 	GetLastEvents(ctx context.Context, limit uint64) ([]E, error)
+
+	// GetUnprocessedEvents returns list of events with the smallest event *id* (not sequence number)
+	// *AND* have NULL sequence numbers, in ascending order of event *id*
+	// size of the list is limited by *limit*
 	GetUnprocessedEvents(ctx context.Context, limit uint64) ([]E, error)
+
+	// GetEventsFrom returns list of events with sequence number >= *from*
+	// in ascending order of event sequence numbers, ignoring events with null sequence numbers
+	// size of the list is limited by *limit*
 	GetEventsFrom(ctx context.Context, from uint64, limit uint64) ([]E, error)
 
+	// UpdateSequences updates only sequence numbers of *events*
 	UpdateSequences(ctx context.Context, events []E) error
+}
+
+// RetentionRepository for delete old events
+type RetentionRepository interface {
+	// GetMinSequence returns the min sequence number of all events (except events with null sequence numbers)
+	// returns null if no events with sequence number existed
+	GetMinSequence(ctx context.Context) (sql.NullInt64, error)
+
+	// DeleteEventsBefore deletes events with sequence number < *beforeSeq*
+	DeleteEventsBefore(ctx context.Context, beforeSeq uint64) error
 }
 
 // Timer for timer
@@ -180,7 +206,8 @@ func cloneAndClearEvents[E any](events []E) []E {
 	return result
 }
 
-// Fetch get events, if ctx is cancelled / deadline exceed then the fetch will returned with error = nil
+// Fetch get events, if ctx is cancelled / deadline exceed then the fetch will be returned with error = nil,
+// and then it can be call again with a normal context object
 func (s *Subscriber[E]) Fetch(ctx context.Context) ([]E, error) {
 	if !s.receiving {
 		s.core.doFetch(fetchRequest[E]{

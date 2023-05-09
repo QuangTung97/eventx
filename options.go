@@ -78,9 +78,9 @@ func WithLogger(logger *zap.Logger) Option {
 	}
 }
 
-//=================================================================
+// =================================================================
 // Subscriber Options
-//=================================================================
+// =================================================================
 
 type subscriberOptions struct {
 	sizeLimit uint64
@@ -103,5 +103,35 @@ func computeSubscriberOptions(opts ...SubscriberOption) subscriberOptions {
 func WithSubscriberSizeLimit(sizeLimit uint64) SubscriberOption {
 	return func(opts *subscriberOptions) {
 		opts.sizeLimit = sizeLimit
+	}
+}
+
+type retentionOptions struct {
+	maxTotalEvents uint64
+	fetchLimit     uint64
+}
+
+// =================================================================
+// Retention Options
+// =================================================================
+
+// RetentionOption ...
+type RetentionOption func(opts *retentionOptions)
+
+func computeRetentionOptions(options ...RetentionOption) retentionOptions {
+	opts := retentionOptions{
+		maxTotalEvents: 100000000, // 100,000,000
+		fetchLimit:     1024,
+	}
+	for _, o := range options {
+		o(&opts)
+	}
+	return opts
+}
+
+// WithMaxTotalEvents keep the number of events not more than *maxSize*
+func WithMaxTotalEvents(maxSize uint64) RetentionOption {
+	return func(opts *retentionOptions) {
+		opts.maxTotalEvents = maxSize
 	}
 }

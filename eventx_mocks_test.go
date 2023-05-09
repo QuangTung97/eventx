@@ -5,6 +5,7 @@ package eventx
 
 import (
 	"context"
+	"database/sql"
 	"sync"
 	"time"
 )
@@ -230,6 +231,118 @@ func (mock *RepositoryMock[E]) UpdateSequencesCalls() []struct {
 	mock.lockUpdateSequences.RLock()
 	calls = mock.calls.UpdateSequences
 	mock.lockUpdateSequences.RUnlock()
+	return calls
+}
+
+// RetentionRepositoryMock is a mock implementation of RetentionRepository.
+//
+//	func TestSomethingThatUsesRetentionRepository(t *testing.T) {
+//
+//		// make and configure a mocked RetentionRepository
+//		mockedRetentionRepository := &RetentionRepositoryMock{
+//			DeleteEventsBeforeFunc: func(ctx context.Context, beforeSeq uint64) error {
+//				panic("mock out the DeleteEventsBefore method")
+//			},
+//			GetMinSequenceFunc: func(ctx context.Context) (sql.NullInt64, error) {
+//				panic("mock out the GetMinSequence method")
+//			},
+//		}
+//
+//		// use mockedRetentionRepository in code that requires RetentionRepository
+//		// and then make assertions.
+//
+//	}
+type RetentionRepositoryMock struct {
+	// DeleteEventsBeforeFunc mocks the DeleteEventsBefore method.
+	DeleteEventsBeforeFunc func(ctx context.Context, beforeSeq uint64) error
+
+	// GetMinSequenceFunc mocks the GetMinSequence method.
+	GetMinSequenceFunc func(ctx context.Context) (sql.NullInt64, error)
+
+	// calls tracks calls to the methods.
+	calls struct {
+		// DeleteEventsBefore holds details about calls to the DeleteEventsBefore method.
+		DeleteEventsBefore []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+			// BeforeSeq is the beforeSeq argument value.
+			BeforeSeq uint64
+		}
+		// GetMinSequence holds details about calls to the GetMinSequence method.
+		GetMinSequence []struct {
+			// Ctx is the ctx argument value.
+			Ctx context.Context
+		}
+	}
+	lockDeleteEventsBefore sync.RWMutex
+	lockGetMinSequence     sync.RWMutex
+}
+
+// DeleteEventsBefore calls DeleteEventsBeforeFunc.
+func (mock *RetentionRepositoryMock) DeleteEventsBefore(ctx context.Context, beforeSeq uint64) error {
+	if mock.DeleteEventsBeforeFunc == nil {
+		panic("RetentionRepositoryMock.DeleteEventsBeforeFunc: method is nil but RetentionRepository.DeleteEventsBefore was just called")
+	}
+	callInfo := struct {
+		Ctx       context.Context
+		BeforeSeq uint64
+	}{
+		Ctx:       ctx,
+		BeforeSeq: beforeSeq,
+	}
+	mock.lockDeleteEventsBefore.Lock()
+	mock.calls.DeleteEventsBefore = append(mock.calls.DeleteEventsBefore, callInfo)
+	mock.lockDeleteEventsBefore.Unlock()
+	return mock.DeleteEventsBeforeFunc(ctx, beforeSeq)
+}
+
+// DeleteEventsBeforeCalls gets all the calls that were made to DeleteEventsBefore.
+// Check the length with:
+//
+//	len(mockedRetentionRepository.DeleteEventsBeforeCalls())
+func (mock *RetentionRepositoryMock) DeleteEventsBeforeCalls() []struct {
+	Ctx       context.Context
+	BeforeSeq uint64
+} {
+	var calls []struct {
+		Ctx       context.Context
+		BeforeSeq uint64
+	}
+	mock.lockDeleteEventsBefore.RLock()
+	calls = mock.calls.DeleteEventsBefore
+	mock.lockDeleteEventsBefore.RUnlock()
+	return calls
+}
+
+// GetMinSequence calls GetMinSequenceFunc.
+func (mock *RetentionRepositoryMock) GetMinSequence(ctx context.Context) (sql.NullInt64, error) {
+	if mock.GetMinSequenceFunc == nil {
+		panic("RetentionRepositoryMock.GetMinSequenceFunc: method is nil but RetentionRepository.GetMinSequence was just called")
+	}
+	callInfo := struct {
+		Ctx context.Context
+	}{
+		Ctx: ctx,
+	}
+	mock.lockGetMinSequence.Lock()
+	mock.calls.GetMinSequence = append(mock.calls.GetMinSequence, callInfo)
+	mock.lockGetMinSequence.Unlock()
+	return mock.GetMinSequenceFunc(ctx)
+}
+
+// GetMinSequenceCalls gets all the calls that were made to GetMinSequence.
+// Check the length with:
+//
+//	len(mockedRetentionRepository.GetMinSequenceCalls())
+func (mock *RetentionRepositoryMock) GetMinSequenceCalls() []struct {
+	Ctx context.Context
+} {
+	var calls []struct {
+		Ctx context.Context
+	}
+	mock.lockGetMinSequence.RLock()
+	calls = mock.calls.GetMinSequence
+	mock.lockGetMinSequence.RUnlock()
 	return calls
 }
 
