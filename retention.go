@@ -69,8 +69,7 @@ func (j *RetentionJob[E]) RunJob(ctx context.Context) {
 	for {
 		j.runInLoop(ctx)
 
-		// TODO Add Option
-		j.sleepFunc(ctx, 30*time.Second)
+		j.sleepFunc(ctx, j.options.errorRetryDuration)
 
 		if ctx.Err() != nil {
 			return
@@ -90,7 +89,7 @@ func (j *RetentionJob[E]) runInLoop(ctx context.Context) {
 
 			err := j.retentionRepo.DeleteEventsBefore(ctx, beforeSeq)
 			if err != nil {
-				// TODO log error
+				j.options.errorLogger(err) // TODO testing
 				return
 			}
 			j.minSequence = sql.NullInt64{
@@ -101,7 +100,7 @@ func (j *RetentionJob[E]) runInLoop(ctx context.Context) {
 
 		events, err := j.sub.Fetch(ctx)
 		if err != nil {
-			// TODO Log error
+			j.options.errorLogger(err) // TODO testing
 			return
 		}
 		if len(events) == 0 {

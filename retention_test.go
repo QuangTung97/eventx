@@ -3,6 +3,7 @@ package eventx
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"sync"
 	"testing"
@@ -47,7 +48,13 @@ func (r *retentionTest) initJob(options ...RetentionOption) error {
 }
 
 func (r *retentionTest) mustInit(maxSize uint64) {
-	err := r.initJob(WithMaxTotalEvents(maxSize))
+	err := r.initJob(
+		WithMaxTotalEvents(maxSize),
+		WithRetentionErrorLogger(func(err error) {
+			fmt.Println("ERROR retention:", err)
+		}),
+		WithRetentionErrorRetryDuration(45*time.Second),
+	)
 	if err != nil {
 		panic(err)
 	}

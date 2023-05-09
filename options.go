@@ -2,6 +2,7 @@ package eventx
 
 import (
 	"go.uber.org/zap"
+	"log"
 	"time"
 )
 
@@ -107,8 +108,10 @@ func WithSubscriberSizeLimit(sizeLimit uint64) SubscriberOption {
 }
 
 type retentionOptions struct {
-	maxTotalEvents uint64
-	fetchLimit     uint64
+	maxTotalEvents     uint64
+	fetchLimit         uint64
+	errorLogger        func(err error)
+	errorRetryDuration time.Duration
 }
 
 // =================================================================
@@ -122,6 +125,10 @@ func computeRetentionOptions(options ...RetentionOption) retentionOptions {
 	opts := retentionOptions{
 		maxTotalEvents: 100000000, // 100,000,000
 		fetchLimit:     1024,
+		errorLogger: func(err error) {
+			log.Println("[ERROR]", err)
+		},
+		errorRetryDuration: 30 * time.Second,
 	}
 	for _, o := range options {
 		o(&opts)
@@ -133,5 +140,19 @@ func computeRetentionOptions(options ...RetentionOption) retentionOptions {
 func WithMaxTotalEvents(maxSize uint64) RetentionOption {
 	return func(opts *retentionOptions) {
 		opts.maxTotalEvents = maxSize
+	}
+}
+
+// WithRetentionErrorLogger config the error logger
+func WithRetentionErrorLogger(logger func(err error)) RetentionOption {
+	return func(opts *retentionOptions) {
+		opts.errorLogger = logger
+	}
+}
+
+// WithRetentionErrorRetryDuration config the retry duration
+func WithRetentionErrorRetryDuration(d time.Duration) RetentionOption {
+	return func(opts *retentionOptions) {
+		opts.errorRetryDuration = d
 	}
 }
