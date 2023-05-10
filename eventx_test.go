@@ -108,7 +108,7 @@ func TestSubscriber_Context_Cancelled_Continue(t *testing.T) {
 	fetchCancel()
 
 	events, err := sub.Fetch(fetchCtx)
-	assert.Equal(t, nil, err)
+	assert.Equal(t, context.Canceled, err)
 	assert.Equal(t, []testEvent(nil), events)
 
 	events, err = sub.Fetch(ctx)

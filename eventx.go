@@ -206,7 +206,7 @@ func cloneAndClearEvents[E any](events []E) []E {
 	return result
 }
 
-// Fetch get events, if ctx is cancelled / deadline exceed then the fetch will be returned with error = nil,
+// Fetch get events, if ctx is cancelled / deadline exceed then the fetch will be returned with error = ctx.Err(),
 // and then it can be call again with a normal context object
 func (s *Subscriber[E]) Fetch(ctx context.Context) ([]E, error) {
 	if !s.receiving {
@@ -247,7 +247,7 @@ func (s *Subscriber[E]) Fetch(ctx context.Context) ([]E, error) {
 		return cloneAndClearEvents(resp.events), nil
 
 	case <-ctx.Done():
-		return nil, nil
+		return nil, ctx.Err()
 	}
 }
 
