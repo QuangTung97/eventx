@@ -109,6 +109,7 @@ func WithSubscriberSizeLimit(sizeLimit uint64) SubscriberOption {
 
 type retentionOptions struct {
 	maxTotalEvents     uint64
+	deleteBatchSize    uint64
 	fetchLimit         uint64
 	errorLogger        func(err error)
 	errorRetryDuration time.Duration
@@ -121,13 +122,16 @@ type retentionOptions struct {
 // RetentionOption ...
 type RetentionOption func(opts *retentionOptions)
 
+func defaultRetentionErrorLogger(err error) {
+	log.Println("[ERROR] retention job:", err)
+}
+
 func computeRetentionOptions(options ...RetentionOption) retentionOptions {
 	opts := retentionOptions{
-		maxTotalEvents: 100000000, // 100,000,000
-		fetchLimit:     1024,
-		errorLogger: func(err error) {
-			log.Println("[ERROR]", err)
-		},
+		maxTotalEvents:     100000000, // 100,000,000
+		deleteBatchSize:    256,
+		fetchLimit:         1024,
+		errorLogger:        defaultRetentionErrorLogger,
 		errorRetryDuration: 30 * time.Second,
 	}
 	for _, o := range options {
@@ -140,6 +144,13 @@ func computeRetentionOptions(options ...RetentionOption) retentionOptions {
 func WithMaxTotalEvents(maxSize uint64) RetentionOption {
 	return func(opts *retentionOptions) {
 		opts.maxTotalEvents = maxSize
+	}
+}
+
+// WithDeleteBatchSize specifies number events to be deleted with DeleteEventsBefore() method
+func WithDeleteBatchSize(size uint64) RetentionOption {
+	return func(opts *retentionOptions) {
+		opts.deleteBatchSize = size
 	}
 }
 

@@ -3,7 +3,7 @@ package eventx
 import (
 	"context"
 	"database/sql"
-	"fmt"
+	"errors"
 	"github.com/stretchr/testify/assert"
 	"sync"
 	"testing"
@@ -47,14 +47,14 @@ func (r *retentionTest) initJob(options ...RetentionOption) error {
 	return err
 }
 
-func (r *retentionTest) mustInit(maxSize uint64) {
-	err := r.initJob(
+func (r *retentionTest) mustInit(maxSize uint64, batchSize uint64, options ...RetentionOption) {
+	opts := []RetentionOption{
 		WithMaxTotalEvents(maxSize),
-		WithRetentionErrorLogger(func(err error) {
-			fmt.Println("ERROR retention:", err)
-		}),
-		WithRetentionErrorRetryDuration(45*time.Second),
-	)
+		WithDeleteBatchSize(batchSize),
+	}
+	opts = append(opts, options...)
+
+	err := r.initJob(opts...)
 	if err != nil {
 		panic(err)
 	}
@@ -104,14 +104,24 @@ func (r *retentionTest) stubGetMinSeqNull() {
 	}
 }
 
+//revive:disable-next-line:cognitive-complexity
 func TestRetentionJob(t *testing.T) {
 	t.Run("new-call-repo", func(t *testing.T) {
 		r := newRetentionTest()
 
+		r.stubGetLastEvents([]testEvent{
+			{id: 43, seq: 14},
+		})
+		r.stubGetMinSeq(9) // 14 - 9 + 1 = 6 = 4 + 2
+
 		err := r.initJob()
 		assert.Equal(t, nil, err)
 
-		assert.Equal(t, 1, len(r.repo.GetLastEventsCalls()))
+		r.doRun()
+		time.Sleep(10 * time.Millisecond)
+		r.waitFinish()
+
+		assert.Equal(t, 2, len(r.repo.GetLastEventsCalls()))
 		assert.Equal(t, uint64(1), r.repo.GetLastEventsCalls()[0].Limit)
 
 		assert.Equal(t, 1, len(r.retentionRepo.GetMinSequenceCalls()))
@@ -121,11 +131,11 @@ func TestRetentionJob(t *testing.T) {
 		r := newRetentionTest()
 
 		r.stubGetLastEvents([]testEvent{
-			{id: 13, seq: 13},
+			{id: 43, seq: 14},
 		})
-		r.stubGetMinSeq(9) // 13 - 9 + 1 = 5 > 4
+		r.stubGetMinSeq(9) // 14 - 9 + 1 = 6 = 4 + 2
 
-		r.mustInit(4)
+		r.mustInit(4, 2)
 
 		r.retentionRepo.DeleteEventsBeforeFunc = func(ctx context.Context, beforeSeq uint64) error {
 			return nil
@@ -136,18 +146,18 @@ func TestRetentionJob(t *testing.T) {
 		r.waitFinish()
 
 		assert.Equal(t, 1, len(r.retentionRepo.DeleteEventsBeforeCalls()))
-		assert.Equal(t, uint64(10), r.retentionRepo.DeleteEventsBeforeCalls()[0].BeforeSeq)
+		assert.Equal(t, uint64(9+2), r.retentionRepo.DeleteEventsBeforeCalls()[0].BeforeSeq)
 	})
 
 	t.Run("run-delete-multiple-times--immediately", func(t *testing.T) {
 		r := newRetentionTest()
 
 		r.stubGetLastEvents([]testEvent{
-			{id: 17, seq: 17},
+			{id: 50, seq: 17},
 		})
-		r.stubGetMinSeq(9) // 13 - 9 + 1 = 5 > 4
+		r.stubGetMinSeq(9) // 17 - 9 + 1 = 9 = 4 + 2 + 2 + 1
 
-		r.mustInit(4)
+		r.mustInit(4, 2)
 
 		r.retentionRepo.DeleteEventsBeforeFunc = func(ctx context.Context, beforeSeq uint64) error {
 			return nil
@@ -158,19 +168,19 @@ func TestRetentionJob(t *testing.T) {
 		r.waitFinish()
 
 		assert.Equal(t, 2, len(r.retentionRepo.DeleteEventsBeforeCalls()))
-		assert.Equal(t, uint64(13), r.retentionRepo.DeleteEventsBeforeCalls()[0].BeforeSeq)
-		assert.Equal(t, uint64(14), r.retentionRepo.DeleteEventsBeforeCalls()[1].BeforeSeq)
+		assert.Equal(t, uint64(9+2), r.retentionRepo.DeleteEventsBeforeCalls()[0].BeforeSeq)
+		assert.Equal(t, uint64(9+2+2), r.retentionRepo.DeleteEventsBeforeCalls()[1].BeforeSeq)
 	})
 
 	t.Run("run--not-delete", func(t *testing.T) {
 		r := newRetentionTest()
 
 		r.stubGetLastEvents([]testEvent{
-			{id: 17, seq: 17},
+			{id: 47, seq: 18},
 		})
-		r.stubGetMinSeq(13) // 17 - 13 + 1 = 5
+		r.stubGetMinSeq(13) // 18 - 13 + 1 = 6 = 5 + 1
 
-		r.mustInit(5)
+		r.mustInit(5, 2)
 
 		r.retentionRepo.DeleteEventsBeforeFunc = func(ctx context.Context, beforeSeq uint64) error {
 			return nil
@@ -187,11 +197,11 @@ func TestRetentionJob(t *testing.T) {
 		r := newRetentionTest()
 
 		r.stubGetLastEvents([]testEvent{
-			{id: 17, seq: 17},
+			{id: 47, seq: 17},
 		})
 		r.stubGetMinSeqNull()
 
-		r.mustInit(5)
+		r.mustInit(5, 3)
 
 		r.retentionRepo.DeleteEventsBeforeFunc = func(ctx context.Context, beforeSeq uint64) error {
 			return nil
@@ -208,27 +218,29 @@ func TestRetentionJob(t *testing.T) {
 		r := newRetentionTest()
 
 		r.stubGetLastEvents([]testEvent{
-			{id: 17, seq: 17},
+			{id: 47, seq: 19},
 		})
-		r.stubGetMinSeq(13)
+		r.stubGetMinSeq(13) // 19 - 13 + 1 = 7 = 5 + 2
 
-		r.mustInit(5)
+		r.mustInit(5, 3)
 
 		r.retentionRepo.DeleteEventsBeforeFunc = func(ctx context.Context, beforeSeq uint64) error {
 			return nil
 		}
 
 		r.stubGetLastEvents([]testEvent{
-			{id: 13, seq: 13},
-			{id: 14, seq: 14},
-			{id: 15, seq: 15},
-			{id: 16, seq: 16},
-			{id: 17, seq: 17},
+			{id: 43, seq: 13},
+			{id: 44, seq: 14},
+			{id: 45, seq: 15},
+			{id: 46, seq: 16},
+			{id: 47, seq: 17},
+			{id: 48, seq: 18},
+			{id: 49, seq: 19},
 		})
 
 		r.repo.GetUnprocessedEventsFunc = func(ctx context.Context, limit uint64) ([]testEvent, error) {
 			return []testEvent{
-				{id: 18},
+				{id: 50},
 			}, nil
 		}
 		r.repo.UpdateSequencesFunc = func(ctx context.Context, events []testEvent) error {
@@ -243,34 +255,34 @@ func TestRetentionJob(t *testing.T) {
 		r.waitFinish()
 
 		assert.Equal(t, 1, len(r.retentionRepo.DeleteEventsBeforeCalls()))
-		assert.Equal(t, uint64(14), r.retentionRepo.DeleteEventsBeforeCalls()[0].BeforeSeq)
+		assert.Equal(t, uint64(13+3), r.retentionRepo.DeleteEventsBeforeCalls()[0].BeforeSeq)
 	})
 
 	t.Run("run--delete-multiple-times--after-notify-events", func(t *testing.T) {
 		r := newRetentionTest()
 
 		r.stubGetLastEvents([]testEvent{
-			{id: 17, seq: 17},
+			{id: 48, seq: 18},
 		})
-		r.stubGetMinSeq(15)
+		r.stubGetMinSeq(15) // 18 - 15 + 1 = 4 = 3 + 1
 
-		r.mustInit(3)
+		r.mustInit(3, 2)
 
 		r.retentionRepo.DeleteEventsBeforeFunc = func(ctx context.Context, beforeSeq uint64) error {
 			return nil
 		}
 
 		r.stubGetLastEvents([]testEvent{
-			{id: 15, seq: 15},
-			{id: 16, seq: 16},
-			{id: 17, seq: 17},
+			{id: 45, seq: 15},
+			{id: 46, seq: 16},
+			{id: 47, seq: 17},
+			{id: 48, seq: 18},
 		})
 
 		r.repo.GetUnprocessedEventsFunc = func(ctx context.Context, limit uint64) ([]testEvent, error) {
 			return []testEvent{
-				{id: 18}, {id: 19},
-				{id: 20}, {id: 21},
-				{id: 22},
+				{id: 49}, {id: 50},
+				{id: 51}, {id: 52},
 			}, nil
 		}
 		r.repo.UpdateSequencesFunc = func(ctx context.Context, events []testEvent) error {
@@ -285,7 +297,143 @@ func TestRetentionJob(t *testing.T) {
 		r.waitFinish()
 
 		assert.Equal(t, 2, len(r.retentionRepo.DeleteEventsBeforeCalls()))
-		assert.Equal(t, uint64(18), r.retentionRepo.DeleteEventsBeforeCalls()[0].BeforeSeq)
-		assert.Equal(t, uint64(20), r.retentionRepo.DeleteEventsBeforeCalls()[1].BeforeSeq)
+		assert.Equal(t, uint64(15+2), r.retentionRepo.DeleteEventsBeforeCalls()[0].BeforeSeq)
+		assert.Equal(t, uint64(15+2+2), r.retentionRepo.DeleteEventsBeforeCalls()[1].BeforeSeq)
+	})
+
+	t.Run("run--init-get-last-events-returns-error--do-sleep", func(t *testing.T) {
+		r := newRetentionTest()
+
+		getErr := errors.New("get error")
+		r.repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]testEvent, error) {
+			return nil, getErr
+		}
+
+		var logErr error
+		r.mustInit(4, 2,
+			WithRetentionErrorLogger(func(err error) {
+				logErr = err
+			}),
+			WithRetentionErrorRetryDuration(50*time.Millisecond),
+		)
+
+		var duration time.Duration
+
+		prevSleepFunc := r.job.sleepFunc
+		r.job.sleepFunc = func(ctx context.Context, d time.Duration) {
+			duration = d
+			prevSleepFunc(ctx, d)
+		}
+
+		r.doRun()
+		time.Sleep(10 * time.Millisecond)
+		r.waitFinish()
+
+		assert.Equal(t, 2, len(r.repo.GetLastEventsCalls()))
+
+		assert.Equal(t, getErr, logErr)
+		assert.Equal(t, 50*time.Millisecond, duration)
+	})
+
+	t.Run("run--init-get-last-events-returns-error--do-sleep--sleep-finish-call-again", func(t *testing.T) {
+		r := newRetentionTest()
+
+		getErr := errors.New("get error")
+		r.repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]testEvent, error) {
+			return nil, getErr
+		}
+
+		var logErr error
+		r.mustInit(4, 2,
+			WithRetentionErrorLogger(func(err error) {
+				logErr = err
+			}),
+			WithRetentionErrorRetryDuration(50*time.Millisecond),
+		)
+
+		var duration time.Duration
+
+		prevSleepFunc := r.job.sleepFunc
+		r.job.sleepFunc = func(ctx context.Context, d time.Duration) {
+			duration = d
+			prevSleepFunc(ctx, d)
+		}
+
+		r.doRun()
+		time.Sleep(70 * time.Millisecond)
+		r.waitFinish()
+
+		assert.Equal(t, 3, len(r.repo.GetLastEventsCalls()))
+
+		assert.Equal(t, getErr, logErr)
+		assert.Equal(t, 50*time.Millisecond, duration)
+	})
+
+	t.Run("run--init-get-min-sequence-error", func(t *testing.T) {
+		r := newRetentionTest()
+
+		r.stubGetLastEvents([]testEvent{
+			{id: 47, seq: 17},
+		})
+
+		getErr := errors.New("get error")
+		r.retentionRepo.GetMinSequenceFunc = func(ctx context.Context) (sql.NullInt64, error) {
+			return sql.NullInt64{}, getErr
+		}
+
+		var logErr error
+		r.mustInit(4, 2,
+			WithRetentionErrorLogger(func(err error) {
+				logErr = err
+				defaultRetentionErrorLogger(err)
+			}),
+		)
+
+		var duration time.Duration
+
+		prevSleepFunc := r.job.sleepFunc
+		r.job.sleepFunc = func(ctx context.Context, d time.Duration) {
+			duration = d
+			prevSleepFunc(ctx, d)
+		}
+
+		r.doRun()
+		time.Sleep(10 * time.Millisecond)
+		r.waitFinish()
+
+		assert.Equal(t, 2, len(r.repo.GetLastEventsCalls()))
+
+		assert.Equal(t, getErr, logErr)
+		assert.Equal(t, 30*time.Second, duration)
+	})
+
+	t.Run("run--delete-immediately-with-error", func(t *testing.T) {
+		r := newRetentionTest()
+
+		r.stubGetLastEvents([]testEvent{
+			{id: 43, seq: 14},
+		})
+		r.stubGetMinSeq(9) // 14 - 9 + 1 = 6 = 4 + 2
+
+		var logErr error
+		r.mustInit(4, 2,
+			WithRetentionErrorLogger(func(err error) {
+				logErr = err
+			}),
+		)
+
+		deleteErr := errors.New("delete error")
+		r.retentionRepo.DeleteEventsBeforeFunc = func(ctx context.Context, beforeSeq uint64) error {
+			return deleteErr
+		}
+
+		r.doRun()
+		time.Sleep(10 * time.Millisecond)
+		r.waitFinish()
+
+		assert.Equal(t, 1, len(r.retentionRepo.DeleteEventsBeforeCalls()))
+		assert.Equal(t, uint64(9+2), r.retentionRepo.DeleteEventsBeforeCalls()[0].BeforeSeq)
+
+		assert.Equal(t, deleteErr, logErr)
 	})
 }

@@ -15,7 +15,8 @@ type RetentionJob[E EventConstraint] struct {
 
 	retentionRepo RetentionRepository
 
-	sub *Subscriber[E]
+	runner *Runner[E]
+	sub    *Subscriber[E]
 
 	sleepFunc func(ctx context.Context, d time.Duration)
 }
@@ -26,35 +27,12 @@ func NewRetentionJob[E EventConstraint](
 	repo RetentionRepository,
 	options ...RetentionOption,
 ) (*RetentionJob[E], error) {
-	events, err := runner.repo.GetLastEvents(context.Background(), 1)
-	if err != nil {
-		return nil, err
-	}
-
-	fromSequence := uint64(1)
-	if len(events) > 0 {
-		fromSequence = events[0].GetSequence() + 1
-	}
-
-	minSequence, err := repo.GetMinSequence(context.Background())
-	if err != nil {
-		return nil, err
-	}
-
 	opts := computeRetentionOptions(options...)
 
-	sub := runner.NewSubscriber(fromSequence, opts.fetchLimit)
-
 	return &RetentionJob[E]{
-		options: opts,
-
-		minSequence:  minSequence,
-		nextSequence: fromSequence,
-
+		options:       opts,
 		retentionRepo: repo,
-
-		sub: sub,
-
+		runner:        runner,
 		sleepFunc: func(ctx context.Context, d time.Duration) {
 			select {
 			case <-time.After(d):
@@ -62,6 +40,29 @@ func NewRetentionJob[E EventConstraint](
 			}
 		},
 	}, nil
+}
+
+func (j *RetentionJob[E]) initJob(ctx context.Context) error {
+	events, err := j.runner.repo.GetLastEvents(ctx, 1)
+	if err != nil {
+		return err
+	}
+
+	fromSequence := uint64(1)
+	if len(events) > 0 {
+		fromSequence = events[0].GetSequence() + 1
+	}
+
+	minSequence, err := j.retentionRepo.GetMinSequence(ctx)
+	if err != nil {
+		return err
+	}
+
+	j.minSequence = minSequence
+	j.nextSequence = fromSequence
+
+	j.sub = j.runner.NewSubscriber(fromSequence, j.options.fetchLimit)
+	return nil
 }
 
 // RunJob will stop when the context object is cancelled / deadline exceeded
@@ -78,18 +79,27 @@ func (j *RetentionJob[E]) RunJob(ctx context.Context) {
 }
 
 func (j *RetentionJob[E]) runInLoop(ctx context.Context) {
-	for {
-		for j.minSequence.Valid && j.nextSequence-uint64(j.minSequence.Int64) > j.options.maxTotalEvents {
-			deleteBefore := j.nextSequence - j.options.maxTotalEvents
+	err := j.initJob(ctx)
+	if err != nil {
+		j.options.errorLogger(err)
+		return
+	}
 
-			beforeSeq := uint64(j.minSequence.Int64) + j.options.maxTotalEvents
-			if beforeSeq > deleteBefore {
-				beforeSeq = deleteBefore
+	for {
+		for {
+			if !j.minSequence.Valid {
+				break
 			}
+
+			if j.nextSequence-uint64(j.minSequence.Int64) < j.options.maxTotalEvents+j.options.deleteBatchSize {
+				break
+			}
+
+			beforeSeq := uint64(j.minSequence.Int64) + j.options.deleteBatchSize
 
 			err := j.retentionRepo.DeleteEventsBefore(ctx, beforeSeq)
 			if err != nil {
-				j.options.errorLogger(err) // TODO testing
+				j.options.errorLogger(err)
 				return
 			}
 			j.minSequence = sql.NullInt64{
@@ -100,7 +110,7 @@ func (j *RetentionJob[E]) runInLoop(ctx context.Context) {
 
 		events, err := j.sub.Fetch(ctx)
 		if err != nil {
-			j.options.errorLogger(err) // TODO testing
+			j.options.errorLogger(err)
 			return
 		}
 		if len(events) == 0 {
