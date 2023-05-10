@@ -42,6 +42,13 @@ func NewRetentionJob[E EventConstraint](
 	}, nil
 }
 
+func (j *RetentionJob[E]) logError(ctx context.Context, err error) {
+	if ctx.Err() != nil {
+		return
+	}
+	j.options.errorLogger(err)
+}
+
 func (j *RetentionJob[E]) initJob(ctx context.Context) error {
 	events, err := j.runner.repo.GetLastEvents(ctx, 1)
 	if err != nil {
@@ -81,7 +88,7 @@ func (j *RetentionJob[E]) RunJob(ctx context.Context) {
 func (j *RetentionJob[E]) runInLoop(ctx context.Context) {
 	err := j.initJob(ctx)
 	if err != nil {
-		j.options.errorLogger(err)
+		j.logError(ctx, err)
 		return
 	}
 
@@ -99,7 +106,7 @@ func (j *RetentionJob[E]) runInLoop(ctx context.Context) {
 
 			err := j.retentionRepo.DeleteEventsBefore(ctx, beforeSeq)
 			if err != nil {
-				j.options.errorLogger(err)
+				j.logError(ctx, err)
 				return
 			}
 			j.minSequence = sql.NullInt64{
@@ -110,10 +117,7 @@ func (j *RetentionJob[E]) runInLoop(ctx context.Context) {
 
 		events, err := j.sub.Fetch(ctx)
 		if err != nil {
-			j.options.errorLogger(err)
-			return
-		}
-		if len(events) == 0 {
+			j.logError(ctx, err)
 			return
 		}
 		j.nextSequence = events[len(events)-1].GetSequence() + 1

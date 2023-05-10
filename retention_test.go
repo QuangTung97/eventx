@@ -201,7 +201,10 @@ func TestRetentionJob(t *testing.T) {
 		})
 		r.stubGetMinSeqNull()
 
-		r.mustInit(5, 3)
+		var logErr error
+		r.mustInit(5, 3, WithRetentionErrorLogger(func(err error) {
+			logErr = err
+		}))
 
 		r.retentionRepo.DeleteEventsBeforeFunc = func(ctx context.Context, beforeSeq uint64) error {
 			return nil
@@ -212,6 +215,7 @@ func TestRetentionJob(t *testing.T) {
 		r.waitFinish()
 
 		assert.Equal(t, 0, len(r.retentionRepo.DeleteEventsBeforeCalls()))
+		assert.Equal(t, nil, logErr)
 	})
 
 	t.Run("run--delete-after-notify-events", func(t *testing.T) {
