@@ -26,7 +26,7 @@ func NewRetentionJob[E EventConstraint](
 	runner *Runner[E],
 	repo RetentionRepository,
 	options ...RetentionOption,
-) (*RetentionJob[E], error) {
+) *RetentionJob[E] {
 	opts := computeRetentionOptions(options...)
 
 	return &RetentionJob[E]{
@@ -39,7 +39,7 @@ func NewRetentionJob[E EventConstraint](
 			case <-ctx.Done():
 			}
 		},
-	}, nil
+	}
 }
 
 func (j *RetentionJob[E]) logError(ctx context.Context, err error) {

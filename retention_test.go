@@ -41,10 +41,9 @@ func newRetentionTest() *retentionTest {
 	return r
 }
 
-func (r *retentionTest) initJob(options ...RetentionOption) error {
-	job, err := NewRetentionJob(r.runner, r.retentionRepo, options...)
+func (r *retentionTest) initJob(options ...RetentionOption) {
+	job := NewRetentionJob(r.runner, r.retentionRepo, options...)
 	r.job = job
-	return err
 }
 
 func (r *retentionTest) mustInit(maxSize uint64, batchSize uint64, options ...RetentionOption) {
@@ -54,10 +53,7 @@ func (r *retentionTest) mustInit(maxSize uint64, batchSize uint64, options ...Re
 	}
 	opts = append(opts, options...)
 
-	err := r.initJob(opts...)
-	if err != nil {
-		panic(err)
-	}
+	r.initJob(opts...)
 }
 
 func (r *retentionTest) doRun() {
@@ -114,8 +110,7 @@ func TestRetentionJob(t *testing.T) {
 		})
 		r.stubGetMinSeq(9) // 14 - 9 + 1 = 6 = 4 + 2
 
-		err := r.initJob()
-		assert.Equal(t, nil, err)
+		r.initJob()
 
 		r.doRun()
 		time.Sleep(10 * time.Millisecond)
