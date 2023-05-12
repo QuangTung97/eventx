@@ -430,3 +430,50 @@ func TestDBProcessor_Run_With_Timeout(t *testing.T) {
 	assert.Equal(t, 0, len(p.signalChan))
 	assert.Equal(t, 1, len(timer.ResetAfterChanCalls()))
 }
+
+func TestDBProcessor_Signal_GetUnprocessedEvents_Second_Times__With_Events_Same_ID_Returns_Error(t *testing.T) {
+	t.Parallel()
+
+	repo := &RepositoryMock[testEvent]{}
+	coreChan := make(chan []testEvent, 1024)
+	p := newDBProcessorWithRepoAndCoreChan(repo, coreChan)
+	initWithEvents(repo, p, nil)
+
+	getUnprocessedWithEvents(repo, []testEvent{
+		{id: 10},
+		{id: 7},
+		{id: 13},
+	})
+
+	repo.UpdateSequencesFunc = func(ctx context.Context, events []testEvent) error {
+		return nil
+	}
+
+	p.doSignal()
+
+	err := p.runProcessor(context.Background())
+	assert.Equal(t, nil, err)
+
+	assert.Equal(t, 1, len(repo.UpdateSequencesCalls()))
+	assert.Equal(t, 1, len(coreChan))
+	assert.Equal(t, []testEvent{
+		{id: 10, seq: 1},
+		{id: 7, seq: 2},
+		{id: 13, seq: 3},
+	}, drainCoreEventsChan(coreChan))
+
+	// Signal Again
+	getUnprocessedWithEvents(repo, []testEvent{
+		{id: 14},
+		{id: 7},
+		{id: 15},
+	})
+
+	p.doSignal()
+
+	err = p.runProcessor(context.Background())
+	assert.Equal(t, errors.New("eventx: detect duplicated event with id=7"), err)
+
+	assert.Equal(t, 1, len(repo.UpdateSequencesCalls()))
+	assert.Equal(t, 0, len(coreChan))
+}

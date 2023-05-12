@@ -1,6 +1,9 @@
 package eventx
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 type dbProcessor[E EventConstraint] struct {
 	options    eventxOptions
@@ -12,6 +15,8 @@ type dbProcessor[E EventConstraint] struct {
 	retryTimer   Timer
 
 	setSequence func(event *E, sequence uint64)
+
+	lruSet *lruEventSet
 }
 
 func newDBProcessor[E EventConstraint](
@@ -33,6 +38,7 @@ func newDBProcessor[E EventConstraint](
 func (p *dbProcessor[E]) init(ctx context.Context) error {
 	p.lastSequence = 0
 	p.retryTimer = newTimer(p.options.dbProcessorRetryTimer)
+	p.lruSet = newLRUEventSet(p.options.coreStoredEventsSize)
 
 	events, err := p.repo.GetLastEvents(ctx, p.options.getLastEventsLimit)
 	if err != nil {
@@ -80,7 +86,11 @@ func (p *dbProcessor[E]) handleSignal(ctx context.Context) (bool, error) {
 		continued = true
 	}
 
-	for i := range events {
+	for i, event := range events {
+		if p.lruSet.existed(event.GetID()) {
+			return false, fmt.Errorf("eventx: detect duplicated event with id=%d", event.GetID())
+		}
+
 		p.lastSequence++
 		p.setSequence(&events[i], p.lastSequence)
 	}
@@ -88,6 +98,10 @@ func (p *dbProcessor[E]) handleSignal(ctx context.Context) (bool, error) {
 	err = p.repo.UpdateSequences(ctx, events)
 	if err != nil {
 		return false, err
+	}
+
+	for _, event := range events {
+		p.lruSet.addID(event.GetID())
 	}
 
 	p.coreChan <- events

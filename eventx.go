@@ -14,6 +14,9 @@ var ErrEventNotFound = errors.New("not found any events from a sequence")
 
 // EventConstraint a type constraint for event
 type EventConstraint interface {
+	// GetID returns the event id
+	GetID() uint64
+
 	// GetSequence returns the event sequence number, = 0 if sequence is null
 	GetSequence() uint64
 

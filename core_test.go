@@ -21,6 +21,10 @@ type testEvent struct {
 	size uint64
 }
 
+func (e testEvent) GetID() uint64 {
+	return e.id
+}
+
 func (e testEvent) GetSequence() uint64 {
 	return e.seq
 }

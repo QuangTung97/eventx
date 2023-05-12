@@ -13,6 +13,10 @@ type testEvent struct {
 	data int
 }
 
+func (e testEvent) GetID() uint64 {
+	return uint64(e.id)
+}
+
 func (e testEvent) GetSequence() uint64 {
 	return e.seq
 }
