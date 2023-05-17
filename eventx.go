@@ -6,6 +6,7 @@ import (
 	"errors"
 	"go.uber.org/zap"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -66,6 +67,8 @@ type Timer interface {
 
 // Runner for running event handling
 type Runner[E EventConstraint] struct {
+	runCount uint64
+
 	repo    Repository[E]
 	options eventxOptions
 
@@ -160,6 +163,11 @@ func (r *Runner[E]) runCoreService(ctx context.Context) {
 
 // Run the runner
 func (r *Runner[E]) Run(ctx context.Context) {
+	newValue := atomic.AddUint64(&r.runCount, 1)
+	if newValue > 1 {
+		panic("Method Runner.Run(ctx) MUST NOT be ran in multiple goroutines")
+	}
+
 	var wg sync.WaitGroup
 	wg.Add(2)
 

@@ -410,3 +410,37 @@ func TestMergeContext(t *testing.T) {
 		assert.Equal(t, context.Canceled, result.Err())
 	})
 }
+
+func TestRunner_Run_In_Multiple_Goroutine__Should_Panics(t *testing.T) {
+	repo := &RepositoryMock[testEvent]{}
+	r := NewRunner[testEvent](repo, setTestEventSeq)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]testEvent, error) {
+		return []testEvent{
+			{id: 30, seq: 18},
+			{id: 28, seq: 19},
+			{id: 33, seq: 20},
+			{id: 32, seq: 21},
+		}, nil
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		r.Run(ctx)
+	}()
+
+	time.Sleep(20 * time.Millisecond)
+
+	cancel()
+
+	assert.PanicsWithValue(t, "Method Runner.Run(ctx) MUST NOT be ran in multiple goroutines", func() {
+		r.Run(ctx)
+	})
+
+	wg.Wait()
+}
