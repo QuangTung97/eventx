@@ -2,7 +2,6 @@ package eventx
 
 import (
 	"context"
-	"database/sql"
 	"time"
 )
 
@@ -10,7 +9,7 @@ import (
 type RetentionJob[E EventConstraint] struct {
 	options retentionOptions
 
-	minSequence  sql.NullInt64
+	minSequence  uint64
 	nextSequence uint64
 
 	retentionRepo RetentionRepository
@@ -65,7 +64,10 @@ func (j *RetentionJob[E]) initJob(ctx context.Context) error {
 		return err
 	}
 
-	j.minSequence = minSequence
+	j.minSequence = 1
+	if minSequence.Valid {
+		j.minSequence = uint64(minSequence.Int64)
+	}
 	j.nextSequence = fromSequence
 
 	j.sub = j.runner.NewSubscriber(fromSequence, j.options.fetchLimit)
@@ -94,25 +96,18 @@ func (j *RetentionJob[E]) runInLoop(ctx context.Context) {
 
 	for {
 		for {
-			if !j.minSequence.Valid {
+			if j.nextSequence < j.options.maxTotalEvents+j.options.deleteBatchSize+j.minSequence {
 				break
 			}
 
-			if j.nextSequence-uint64(j.minSequence.Int64) < j.options.maxTotalEvents+j.options.deleteBatchSize {
-				break
-			}
-
-			beforeSeq := uint64(j.minSequence.Int64) + j.options.deleteBatchSize
+			beforeSeq := j.minSequence + j.options.deleteBatchSize
 
 			err := j.retentionRepo.DeleteEventsBefore(ctx, beforeSeq)
 			if err != nil {
 				j.logError(ctx, err)
 				return
 			}
-			j.minSequence = sql.NullInt64{
-				Valid: true,
-				Int64: int64(beforeSeq),
-			}
+			j.minSequence = beforeSeq
 		}
 
 		events, err := j.sub.Fetch(ctx)

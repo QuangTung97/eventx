@@ -192,7 +192,7 @@ func TestRetentionJob(t *testing.T) {
 		r := newRetentionTest()
 
 		r.stubGetLastEvents([]testEvent{
-			{id: 47, seq: 17},
+			{id: 47, seq: 7},
 		})
 		r.stubGetMinSeqNull()
 
@@ -211,6 +211,28 @@ func TestRetentionJob(t *testing.T) {
 
 		assert.Equal(t, 0, len(r.retentionRepo.DeleteEventsBeforeCalls()))
 		assert.Equal(t, nil, logErr)
+	})
+
+	t.Run("run-delete--when-min-seq-is-null", func(t *testing.T) {
+		r := newRetentionTest()
+
+		r.stubGetLastEvents([]testEvent{
+			{id: 47, seq: 8},
+		})
+		r.stubGetMinSeqNull()
+
+		r.mustInit(5, 3)
+
+		r.retentionRepo.DeleteEventsBeforeFunc = func(ctx context.Context, beforeSeq uint64) error {
+			return nil
+		}
+
+		r.doRun()
+		time.Sleep(10 * time.Millisecond)
+		r.waitFinish()
+
+		assert.Equal(t, 1, len(r.retentionRepo.DeleteEventsBeforeCalls()))
+		assert.Equal(t, uint64(4), r.retentionRepo.DeleteEventsBeforeCalls()[0].BeforeSeq)
 	})
 
 	t.Run("run--delete-after-notify-events", func(t *testing.T) {
