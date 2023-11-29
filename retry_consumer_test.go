@@ -279,8 +279,6 @@ func TestRetryConsumer_GetLastSequence(t *testing.T) {
 			return sql.NullInt64{}, nil
 		}
 
-		time.Sleep(25 * time.Millisecond)
-
 		c.repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]testEvent, error) {
 			return nil, errors.New("get events")
 		}
@@ -295,6 +293,212 @@ func TestRetryConsumer_GetLastSequence(t *testing.T) {
 
 		assert.Equal(t, 1, len(loggedErrors))
 		assert.Equal(t, "retry consumer: repo.GetLastEvents: get events", loggedErrors[0].Error())
+
+		c.shutdown()
+	})
+
+	t.Run("get last events return empty, call set with zero", func(t *testing.T) {
+		var loggedErrors []error
+		c := newRetryConsumerTest(t, nil,
+			WithRetryConsumerErrorLogger(func(err error) {
+				loggedErrors = append(loggedErrors, err)
+			}),
+		)
+
+		c.getFunc = func() (sql.NullInt64, error) {
+			return sql.NullInt64{}, nil
+		}
+		c.setFunc = func() error {
+			return nil
+		}
+
+		c.runConsumer()
+
+		time.Sleep(30 * time.Millisecond)
+		c.cancel()
+		c.consumerWg.Wait()
+
+		assert.Equal(t, 1, c.getCalls)
+		assert.Equal(t, 0, len(loggedErrors))
+		assert.Equal(t, []uint64{0}, c.setCalls)
+		assert.Equal(t, 0, len(c.handlerCalls))
+
+		c.shutdown()
+	})
+
+	t.Run("get last events return empty, call set return error", func(t *testing.T) {
+		var loggedErrors []error
+		c := newRetryConsumerTest(t, nil,
+			WithRetryConsumerErrorLogger(func(err error) {
+				loggedErrors = append(loggedErrors, err)
+			}),
+		)
+
+		c.getFunc = func() (sql.NullInt64, error) {
+			return sql.NullInt64{}, nil
+		}
+		c.setFunc = func() error {
+			return errors.New("set err")
+		}
+
+		c.runConsumer()
+
+		time.Sleep(30 * time.Millisecond)
+		c.cancel()
+		c.consumerWg.Wait()
+
+		assert.Equal(t, 1, c.getCalls)
+
+		assert.Equal(t, 1, len(loggedErrors))
+		assert.Equal(t, "retry consumer: set sequence: set err", loggedErrors[0].Error())
+
+		assert.Equal(t, []uint64{0}, c.setCalls)
+		assert.Equal(t, 0, len(c.handlerCalls))
+
+		c.shutdown()
+	})
+
+	t.Run("get last events return non empty, call set return error", func(t *testing.T) {
+		var loggedErrors []error
+		c := newRetryConsumerTest(t, []testEvent{
+			{id: 30, seq: 18},
+			{id: 31, seq: 19},
+		},
+			WithRetryConsumerErrorLogger(func(err error) {
+				loggedErrors = append(loggedErrors, err)
+			}),
+		)
+
+		c.getFunc = func() (sql.NullInt64, error) {
+			return sql.NullInt64{}, nil
+		}
+		c.setFunc = func() error {
+			return errors.New("set err")
+		}
+
+		c.runConsumer()
+
+		time.Sleep(30 * time.Millisecond)
+		c.cancel()
+		c.consumerWg.Wait()
+
+		assert.Equal(t, 1, c.getCalls)
+
+		assert.Equal(t, 1, len(loggedErrors))
+		assert.Equal(t, "retry consumer: set sequence: set err", loggedErrors[0].Error())
+
+		assert.Equal(t, []uint64{19}, c.setCalls)
+		assert.Equal(t, 0, len(c.handlerCalls))
+
+		c.shutdown()
+	})
+}
+
+func TestRetryConsumer_Handler(t *testing.T) {
+	t.Run("call handler with error, not yet retried", func(t *testing.T) {
+		var loggedErrors []error
+		c := newRetryConsumerTest(t, []testEvent{
+			{id: 30, seq: 18},
+			{id: 28, seq: 19},
+			{id: 33, seq: 20},
+			{id: 32, seq: 21},
+		}, WithRetryConsumerErrorLogger(func(err error) {
+			loggedErrors = append(loggedErrors, err)
+		}))
+
+		c.getFunc = func() (sql.NullInt64, error) {
+			return sql.NullInt64{
+				Valid: true,
+				Int64: 18,
+			}, nil
+		}
+		c.setFunc = func() error {
+			return nil
+		}
+		c.handlerFunc = func() error {
+			return errors.New("handle error")
+		}
+
+		c.startRunner()
+		c.runConsumer()
+
+		time.Sleep(30 * time.Millisecond)
+		c.cancel()
+		c.consumerWg.Wait()
+
+		assert.Equal(t, 1, c.getCalls)
+		assert.Equal(t, []uint64(nil), c.setCalls)
+		assert.Equal(t, 1, len(c.handlerCalls))
+		assert.Equal(t, []testEvent{
+			{id: 28, seq: 19},
+			{id: 33, seq: 20},
+			{id: 32, seq: 21},
+		}, c.handlerCalls[0])
+
+		assert.Equal(t, 1, len(loggedErrors))
+		assert.Equal(t, "retry consumer: handler: handle error", loggedErrors[0].Error())
+
+		c.shutdown()
+	})
+
+	t.Run("call handler with error, retried two times", func(t *testing.T) {
+		var loggedErrors []error
+		c := newRetryConsumerTest(t, []testEvent{
+			{id: 30, seq: 18},
+			{id: 28, seq: 19},
+			{id: 33, seq: 20},
+			{id: 32, seq: 21},
+		},
+			WithConsumerRetryDuration(30*time.Millisecond),
+			WithRetryConsumerErrorLogger(func(err error) {
+				loggedErrors = append(loggedErrors, err)
+			}),
+		)
+
+		c.getFunc = func() (sql.NullInt64, error) {
+			return sql.NullInt64{
+				Valid: true,
+				Int64: 18,
+			}, nil
+		}
+		c.setFunc = func() error {
+			return nil
+		}
+		c.handlerFunc = func() error {
+			return errors.New("handle error")
+		}
+
+		c.startRunner()
+		c.runConsumer()
+
+		time.Sleep(75 * time.Millisecond)
+		c.cancel()
+		c.consumerWg.Wait()
+
+		assert.Equal(t, 1, c.getCalls)
+		assert.Equal(t, []uint64(nil), c.setCalls)
+
+		assert.Equal(t, [][]testEvent{
+			{
+				{id: 28, seq: 19},
+				{id: 33, seq: 20},
+				{id: 32, seq: 21},
+			},
+			{
+				{id: 28, seq: 19},
+				{id: 33, seq: 20},
+				{id: 32, seq: 21},
+			},
+			{
+				{id: 28, seq: 19},
+				{id: 33, seq: 20},
+				{id: 32, seq: 21},
+			},
+		}, c.handlerCalls)
+
+		assert.Equal(t, 3, len(loggedErrors))
+		assert.Equal(t, "retry consumer: handler: handle error", loggedErrors[0].Error())
+		assert.Equal(t, "retry consumer: handler: handle error", loggedErrors[2].Error())
 
 		c.shutdown()
 	})
