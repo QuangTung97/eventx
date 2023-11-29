@@ -43,24 +43,13 @@ func newRetryConsumerTest(_ *testing.T, initEvents []testEvent, options ...Retry
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		runner.Run(ctx)
-	}()
-
 	c := &retryConsumerTest{
 		ctx:    ctx,
 		cancel: cancel,
 		repo:   repo,
 
-		runner: runner,
-
-		shutdown: func() {
-			cancel()
-			wg.Wait()
-		},
+		runner:   runner,
+		shutdown: func() {},
 	}
 
 	consumer := NewRetryConsumer[testEvent](
@@ -73,6 +62,20 @@ func newRetryConsumerTest(_ *testing.T, initEvents []testEvent, options ...Retry
 	c.consumer = consumer
 
 	return c
+}
+
+func (c *retryConsumerTest) startRunner() {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.runner.Run(c.ctx)
+	}()
+
+	c.shutdown = func() {
+		c.cancel()
+		wg.Wait()
+	}
 }
 
 func (c *retryConsumerTest) getSequence(_ context.Context) (sql.NullInt64, error) {
@@ -107,8 +110,6 @@ func TestRetryConsumer_GetLastSequence(t *testing.T) {
 			{id: 32, seq: 21},
 		})
 
-		time.Sleep(25 * time.Millisecond)
-
 		c.getFunc = func() (sql.NullInt64, error) {
 			return sql.NullInt64{}, nil
 		}
@@ -130,9 +131,8 @@ func TestRetryConsumer_GetLastSequence(t *testing.T) {
 		assert.Equal(t, 0, len(c.handlerCalls))
 
 		calls := c.repo.GetLastEventsCalls()
-		assert.Equal(t, 2, len(calls))
-		assert.Equal(t, uint64(256), calls[0].Limit)
-		assert.Equal(t, uint64(1), calls[1].Limit)
+		assert.Equal(t, 1, len(calls))
+		assert.Equal(t, uint64(1), calls[0].Limit)
 
 		c.shutdown()
 	})
@@ -158,6 +158,7 @@ func TestRetryConsumer_GetLastSequence(t *testing.T) {
 			return nil
 		}
 
+		c.startRunner()
 		c.runConsumer()
 
 		time.Sleep(30 * time.Millisecond)
@@ -277,6 +278,8 @@ func TestRetryConsumer_GetLastSequence(t *testing.T) {
 		c.getFunc = func() (sql.NullInt64, error) {
 			return sql.NullInt64{}, nil
 		}
+
+		time.Sleep(25 * time.Millisecond)
 
 		c.repo.GetLastEventsFunc = func(ctx context.Context, limit uint64) ([]testEvent, error) {
 			return nil, errors.New("get events")
