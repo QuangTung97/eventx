@@ -1,9 +1,10 @@
 package eventx
 
 import (
-	"go.uber.org/zap"
 	"log"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 type eventxOptions struct {
