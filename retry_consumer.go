@@ -125,6 +125,9 @@ func (c *RetryConsumer[E]) RunConsumer(ctx context.Context) {
 
 		for {
 			err := c.handler(ctx, events)
+			if ctx.Err() != nil {
+				return
+			}
 			if err != nil {
 				newErr := fmt.Errorf("retry consumer: handler: %w", err)
 				c.conf.errorLogger(newErr)
@@ -151,6 +154,7 @@ func (c *RetryConsumer[E]) RunConsumer(ctx context.Context) {
 				if ctx.Err() != nil {
 					return
 				}
+				continue
 			}
 			break
 		}
@@ -191,5 +195,12 @@ func WithConsumerRetryDuration(d time.Duration) RetryConsumerOption {
 func WithRetryConsumerErrorLogger(logger func(err error)) RetryConsumerOption {
 	return func(conf *retryConsumerConfig) {
 		conf.errorLogger = logger
+	}
+}
+
+// WithRetryConsumerFetchLimit ...
+func WithRetryConsumerFetchLimit(limit uint64) RetryConsumerOption {
+	return func(conf *retryConsumerConfig) {
+		conf.fetchLimit = limit
 	}
 }
