@@ -107,6 +107,7 @@ func (c *retryConsumerTest) runConsumer() {
 	}()
 }
 
+//revive:disable-next-line:cognitive-complexity
 func TestRetryConsumer_GetLastSequence(t *testing.T) {
 	t.Run("get seq return null, not call handler", func(t *testing.T) {
 		c := newRetryConsumerTest(t, []testEvent{
@@ -400,6 +401,7 @@ func TestRetryConsumer_GetLastSequence(t *testing.T) {
 	})
 }
 
+//revive:disable-next-line:cognitive-complexity
 func TestRetryConsumer_Handler(t *testing.T) {
 	t.Run("call handler with error, not yet retried", func(t *testing.T) {
 		var loggedErrors []error
