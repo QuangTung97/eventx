@@ -3,9 +3,10 @@ package eventx
 import (
 	"context"
 	"errors"
-	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func initWithEvents(repo *RepositoryMock[testEvent], p *dbProcessor[testEvent], events []testEvent) {
@@ -77,7 +78,7 @@ func TestDBProcessor_Init_Call_GetLastEvents_Error(t *testing.T) {
 	err := p.init(ctx)
 
 	assert.Equal(t, 1, len(repo.GetLastEventsCalls()))
-	assert.Equal(t, errors.New("get-last-events-error"), err)
+	assert.Equal(t, "repo.GetLastEvents: get-last-events-error", err.Error())
 }
 
 func TestDBProcessor_Init_CoreChan_Events(t *testing.T) {
@@ -145,7 +146,7 @@ func TestDBProcessor_Signal_GetUnprocessedEvents_Error(t *testing.T) {
 
 	assert.Equal(t, 1, len(timer.ResetCalls()))
 	assert.Equal(t, uint64(256), callLimit)
-	assert.Equal(t, errors.New("get-unprocessed-error"), err)
+	assert.Equal(t, "repo.GetUnprocessedEvents: get-unprocessed-error", err.Error())
 }
 
 func TestDBProcessor_Signal_GetUnprocessedEvents_Empty(t *testing.T) {
@@ -200,7 +201,7 @@ func TestDBProcessor_Signal_GetUnprocessedEvents_WithEvents_Update_Error(t *test
 	p.doSignal()
 	err := p.runProcessor(context.Background())
 
-	assert.Equal(t, errors.New("update-seq-error"), err)
+	assert.Equal(t, "repo.UpdateSequences: update-seq-error", err.Error())
 	assert.Equal(t, 1, len(repo.UpdateSequencesCalls()))
 	assert.Equal(t, []testEvent{
 		{id: 10, seq: 1},

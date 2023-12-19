@@ -1,10 +1,12 @@
 package eventx
 
 import (
-	"github.com/stretchr/testify/assert"
-	"go.uber.org/zap"
+	"errors"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 )
 
 func TestComputeCoreOptions(t *testing.T) {
@@ -74,8 +76,23 @@ func TestComputeCoreOptions(t *testing.T) {
 			t.Parallel()
 
 			opts := defaultOptions()
+			opts.errorLogger = nil
+
 			e.expected(&opts)
+
+			e.opts.errorLogger = nil
 			assert.Equal(t, opts, e.opts)
 		})
 	}
+}
+
+func TestComputeCoreOptions_ErrorLogger(t *testing.T) {
+	var lastErr error
+
+	options := computeOptions(WithErrorLogger(func(err error) {
+		lastErr = err
+	}))
+	options.errorLogger(errors.New("some error"))
+
+	assert.Equal(t, errors.New("some error"), lastErr)
 }

@@ -4,10 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"go.uber.org/zap"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // ErrEventNotFound when select from events table not find events >= sequence (because of retention)
@@ -126,6 +127,8 @@ OuterLoop:
 		}
 		if err != nil {
 			r.options.logger.Error("DB Processor Init Error", zap.Error(err))
+			r.options.errorLogger(err)
+
 			sleepContext(ctx, r.options.dbProcessorErrorRetryTimer)
 			if ctx.Err() != nil {
 				return
@@ -140,6 +143,8 @@ OuterLoop:
 			}
 			if err != nil {
 				r.options.logger.Error("DB Processor Run Error", zap.Error(err))
+				r.options.errorLogger(err)
+
 				sleepContext(ctx, r.options.dbProcessorErrorRetryTimer)
 				if ctx.Err() != nil {
 					return
