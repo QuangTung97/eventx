@@ -87,12 +87,19 @@ func TestComputeCoreOptions(t *testing.T) {
 }
 
 func TestComputeCoreOptions_ErrorLogger(t *testing.T) {
-	var lastErr error
+	t.Run("normal", func(t *testing.T) {
+		var lastErr error
 
-	options := computeOptions(WithErrorLogger(func(err error) {
-		lastErr = err
-	}))
-	options.errorLogger(errors.New("some error"))
+		options := computeOptions(WithErrorLogger(func(err error) {
+			lastErr = err
+		}))
+		options.errorLogger(errors.New("some error"))
 
-	assert.Equal(t, errors.New("some error"), lastErr)
+		assert.Equal(t, errors.New("some error"), lastErr)
+	})
+
+	t.Run("do nothing", func(t *testing.T) {
+		options := computeOptions()
+		options.errorLogger(errors.New("some error"))
+	})
 }
