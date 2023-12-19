@@ -14,10 +14,14 @@ type eventxOptions struct {
 	dbProcessorErrorRetryTimer time.Duration
 	coreStoredEventsSize       uint64
 	logger                     *zap.Logger
+	errorLogger                func(err error)
 }
 
 // Option for configuration
 type Option func(opts *eventxOptions)
+
+func defaultErrorLogger(_ error) {
+}
 
 func defaultOptions() eventxOptions {
 	return eventxOptions{
@@ -27,6 +31,7 @@ func defaultOptions() eventxOptions {
 		dbProcessorErrorRetryTimer: 60 * time.Second,
 		coreStoredEventsSize:       1024,
 		logger:                     zap.NewNop(),
+		errorLogger:                defaultErrorLogger,
 	}
 }
 
@@ -73,10 +78,17 @@ func WithCoreStoredEventsSize(size uint64) Option {
 	}
 }
 
-// WithLogger configures error logger
+// WithLogger configures error zap logger
 func WithLogger(logger *zap.Logger) Option {
 	return func(opts *eventxOptions) {
 		opts.logger = logger
+	}
+}
+
+// WithErrorLogger configures callback func for errors
+func WithErrorLogger(fn func(err error)) Option {
+	return func(opts *eventxOptions) {
+		opts.errorLogger = fn
 	}
 }
 

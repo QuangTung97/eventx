@@ -3,10 +3,11 @@ package eventx
 import (
 	"context"
 	"errors"
-	"github.com/stretchr/testify/assert"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSubscriber(t *testing.T) {

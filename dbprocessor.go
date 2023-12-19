@@ -42,7 +42,7 @@ func (p *dbProcessor[E]) init(ctx context.Context) error {
 
 	events, err := p.repo.GetLastEvents(ctx, p.options.getLastEventsLimit)
 	if err != nil {
-		return err
+		return fmt.Errorf("repo.GetLastEvents: %w", err)
 	}
 
 	if len(events) > 0 {
@@ -77,7 +77,7 @@ func (p *dbProcessor[E]) handleSignal(ctx context.Context) (bool, error) {
 
 	events, err := p.repo.GetUnprocessedEvents(ctx, p.options.getUnprocessedEventsLimit)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("repo.GetUnprocessedEvents: %w", err)
 	}
 	if len(events) == 0 {
 		return false, nil
@@ -97,7 +97,7 @@ func (p *dbProcessor[E]) handleSignal(ctx context.Context) (bool, error) {
 
 	err = p.repo.UpdateSequences(ctx, events)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("repo.UpdateSequences: %w", err)
 	}
 
 	for _, event := range events {
